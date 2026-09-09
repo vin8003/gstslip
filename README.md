@@ -1,26 +1,21 @@
 # GSTSlip
 
-Mobile-first India GST invoice capture. Photograph or upload a tax invoice (JPEG, PNG, WebP, PDF), extract fields and line items, edit the register, then download CSV or Tally purchase XML.
+India GST invoice capture. Photograph or upload a tax invoice, review extracted fields and line items, then download CSV or Tally purchase XML.
 
-## Run
+## What it does
+
+- Capture from photo, PDF pages, sample invoice, e-invoice QR / IRN (GSP sandbox), or manual entry
+- 10 free documents, then GSTSlip Pro at ₹499/month
+- Manual entry uses a free capture only when a real invoice is saved
+- Fields stay on this device until you export
+
+IRN lookup uses a GSP sandbox — not the live NIC IRP. Tally XML is a file you import; GSTSlip does not connect to Tally.
+
+## Run locally
 
 ```bash
 npm install
 npm run dev
 ```
 
-Preview build:
-
-```bash
-npm run build
-npm run preview
-```
-
-Extraction uses the xAI API (`XAI_API_KEY` on the server). Invoice data stays in the browser until you export.
-
-## Notes
-
-- 10 free captures, then a paywall stub
-- Up to 4 pages per invoice; extra pages can be added to an existing row
-- IRN lookup uses a GSP sandbox, not the live NIC IRP
-- Tally export is a downloadable XML file, not a live Tally connection
+Then open the printed local URL. `npm run build` produces the Vercel production output.

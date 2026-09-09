@@ -6,6 +6,7 @@ import {
   canCapture,
   coerceFields,
   coerceInvoice,
+  hasMeaningfulInvoiceData,
   type GstInvoice,
   type InvoiceField,
   type InvoiceFields,
@@ -19,7 +20,7 @@ type GstState = {
   capturesUsed: number;
   isPro: boolean;
   defaults: InvoiceFields;
-  addInvoice: (invoice: GstInvoice) => boolean;
+  addInvoice: (invoice: GstInvoice, consume?: boolean) => boolean;
   updateInvoice: (
     id: string,
     patch: {
@@ -30,7 +31,7 @@ type GstState = {
       pageCount?: number;
       sourceName?: string;
     },
-  ) => void;
+  ) => boolean;
   removeInvoice: (id: string) => void;
   unlockPro: () => void;
   setDefaults: (defaults: InvoiceFields) => void;
@@ -95,39 +96,64 @@ export const useGstStore = create<GstState>()(
       capturesUsed: 0,
       isPro: false,
       defaults: { ...EMPTY_FIELDS },
-      addInvoice: (invoice) => {
+      addInvoice: (invoice, consume = true) => {
         const { capturesUsed, isPro, invoices } = get();
-        if (!canCapture(capturesUsed, isPro)) return false;
+        if (consume && !canCapture(capturesUsed, isPro)) return false;
+        const row: GstInvoice = consume
+          ? { ...invoice, pendingQuota: undefined }
+          : { ...invoice, pendingQuota: true };
         set({
-          invoices: [invoice, ...invoices],
-          capturesUsed: capturesUsed + 1,
+          invoices: [row, ...invoices],
+          capturesUsed: consume ? capturesUsed + 1 : capturesUsed,
         });
         return true;
       },
       updateInvoice: (id, patch) => {
+        const { invoices, capturesUsed, isPro } = get();
+        const invoice = invoices.find((row) => row.id === id);
+        if (!invoice) return false;
+        const fields = patch.fields ?? invoice.fields;
+        const lineItems = patch.lineItems ?? invoice.lineItems;
+        const filled =
+          patch.filledFromDefaults !== undefined
+            ? patch.filledFromDefaults.length
+              ? patch.filledFromDefaults
+              : undefined
+            : invoice.filledFromDefaults;
+        let pendingQuota = invoice.pendingQuota === true;
+        let nextUsed = capturesUsed;
+        if (pendingQuota && hasMeaningfulInvoiceData(fields, lineItems, filled)) {
+          if (!canCapture(capturesUsed, isPro)) return false;
+          nextUsed = capturesUsed + 1;
+          pendingQuota = false;
+        }
         set({
-          invoices: get().invoices.map((invoice) => {
-            if (invoice.id !== id) return invoice;
-            const filled =
-              patch.filledFromDefaults !== undefined
-                ? patch.filledFromDefaults.length
-                  ? patch.filledFromDefaults
-                  : undefined
-                : invoice.filledFromDefaults;
+          capturesUsed: nextUsed,
+          invoices: invoices.map((row) => {
+            if (row.id !== id) return row;
             return {
-              ...invoice,
-              fields: patch.fields ?? invoice.fields,
+              ...row,
+              fields,
               filledFromDefaults: filled,
-              lineItems: patch.lineItems ?? invoice.lineItems,
-              notes: patch.notes !== undefined ? patch.notes || undefined : invoice.notes,
-              pageCount: patch.pageCount ?? invoice.pageCount,
-              sourceName: patch.sourceName ?? invoice.sourceName,
+              lineItems,
+              notes: patch.notes !== undefined ? patch.notes || undefined : row.notes,
+              pageCount: patch.pageCount ?? row.pageCount,
+              sourceName: patch.sourceName ?? row.sourceName,
+              pendingQuota: pendingQuota || undefined,
             };
           }),
         });
+        return true;
       },
       removeInvoice: (id) => {
-        set({ invoices: get().invoices.filter((invoice) => invoice.id !== id) });
+        const { invoices, capturesUsed } = get();
+        const invoice = invoices.find((row) => row.id === id);
+        if (!invoice) return;
+        const restore = invoice.pendingQuota !== true && capturesUsed > 0;
+        set({
+          invoices: invoices.filter((row) => row.id !== id),
+          capturesUsed: restore ? capturesUsed - 1 : capturesUsed,
+        });
       },
       unlockPro: () => set({ isPro: true }),
       setDefaults: (defaults) => set({ defaults: coerceFields(defaults) }),

@@ -35,6 +35,7 @@ import {
   pruneLineItems,
   remainingCaptures,
   remainingInvoicePages,
+  hasMeaningfulInvoiceData,
   type GstInvoice,
   type InvoiceField,
   type InvoiceFields,
@@ -88,19 +89,39 @@ export function GstApp() {
   const unlockPro = useGstStore((s) => s.unlockPro);
   const setDefaults = useGstStore((s) => s.setDefaults);
 
+  useEffect(() => {
+    hydrateGstStore();
+    const store = useGstStore.getState();
+    for (const invoice of store.invoices) {
+      if (
+        invoice.pendingQuota === true &&
+        invoice.sourceName === "Manual entry" &&
+        !hasMeaningfulInvoiceData(invoice.fields, invoice.lineItems, invoice.filledFromDefaults)
+      ) {
+        store.removeInvoice(invoice.id);
+      }
+    }
+  }, []);
+
   const [capture, setCapture] = useState<CaptureUi>({ phase: "idle" });
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [defaultsOpen, setDefaultsOpen] = useState(false);
   const [irnOpen, setIrnOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [manualDraft, setManualDraft] = useState<GstInvoice | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const pendingDeleteRef = useRef<string | null>(null);
   const extractGen = useRef(0);
   const previewUrlsRef = useRef<string[]>([]);
+  const saveLock = useRef(false);
+  const manualDraftRef = useRef<GstInvoice | null>(null);
+  manualDraftRef.current = manualDraft;
 
   const remaining = remainingCaptures(capturesUsed, isPro);
-  const editing = invoices.find((invoice) => invoice.id === editingId) ?? null;
+  const editing =
+    invoices.find((invoice) => invoice.id === editingId) ??
+    (manualDraft && manualDraft.id === editingId ? manualDraft : null);
   const busy = capture.phase === "working";
   const defaultCount = useMemo(() => countFilledFields(defaults), [defaults]);
   const taxableSum = useMemo(
@@ -108,6 +129,11 @@ export function GstApp() {
       invoices.reduce((sum, invoice) => sum + (parseAmount(invoice.fields.taxable_value) ?? 0), 0),
     [invoices],
   );
+  const pendingDeleteInvoice =
+    invoices.find((invoice) => invoice.id === pendingDelete) ??
+    (manualDraft && manualDraft.id === pendingDelete ? manualDraft : undefined);
+  const pendingDeleteCharged =
+    pendingDeleteInvoice != null && pendingDeleteInvoice.pendingQuota !== true;
 
   const clearPreviews = useCallback(() => {
     for (const url of previewUrlsRef.current) URL.revokeObjectURL(url);
@@ -126,10 +152,14 @@ export function GstApp() {
     }
   }, [capture.phase]);
 
-  const insertInvoice = useCallback((invoice: GstInvoice, openEditor: boolean) => {
+  const insertInvoice = useCallback((invoice: GstInvoice, openEditor: boolean, consume = true) => {
     hydrateGstStore();
     const store = useGstStore.getState();
-    if (!canCapture(store.capturesUsed, store.isPro) || !store.addInvoice(invoice)) {
+    if (consume && !canCapture(store.capturesUsed, store.isPro)) {
+      setPaywallOpen(true);
+      return false;
+    }
+    if (!store.addInvoice(invoice, consume)) {
       setPaywallOpen(true);
       return false;
     }
@@ -211,7 +241,14 @@ export function GstApp() {
       if (!files.length) {
         setCapture({
           phase: "error",
-          message: "Use JPEG, PNG, WebP, or PDF pages of a tax invoice.",
+          message: "Use a JPEG, PNG, WebP, or PDF of a GST tax invoice. Nothing was captured.",
+        });
+        return;
+      }
+      if (files.some((file) => file.size === 0)) {
+        setCapture({
+          phase: "error",
+          message: "That file is empty. Photograph or upload a GST tax invoice.",
         });
         return;
       }
@@ -253,7 +290,7 @@ export function GstApp() {
             phase: "error",
             message:
               result.notes ||
-              "That file does not look like a GST tax invoice. Try a clearer photo of the original.",
+              "That file does not look like a GST tax invoice. Try a clearer photo of the original. Nothing was captured.",
           });
           return;
         }
@@ -304,7 +341,9 @@ export function GstApp() {
   const handleAddPages = useCallback(
     async (invoiceId: string, incoming: File[], live?: { fields: InvoiceFields; lineItems: LineItem[] }) => {
       const store = useGstStore.getState();
-      const current = store.invoices.find((invoice) => invoice.id === invoiceId);
+      const current =
+        store.invoices.find((invoice) => invoice.id === invoiceId) ??
+        (manualDraftRef.current?.id === invoiceId ? manualDraftRef.current : undefined);
       if (!current) return;
       const base: GstInvoice = live
         ? { ...current, fields: live.fields, lineItems: pruneLineItems(live.lineItems) }
@@ -364,7 +403,28 @@ export function GstApp() {
           sourceName,
           useGstStore.getState().defaults,
         );
-        updateInvoice(invoiceId, {
+        const inStore = useGstStore.getState().invoices.some((invoice) => invoice.id === invoiceId);
+        if (!inStore) {
+          const next: GstInvoice = { ...merged, pendingQuota: true };
+          setManualDraft(next);
+          if (!hasMeaningfulInvoiceData(next.fields, next.lineItems, next.filledFromDefaults)) {
+            setCapture({ phase: "idle" });
+            return;
+          }
+          if (!insertInvoice({ ...next, pendingQuota: undefined }, true, true)) {
+            setCapture({ phase: "idle" });
+            return;
+          }
+          setManualDraft(null);
+          setCapture({ phase: "idle" });
+          toast.success(
+            `Added ${pageCount} page${pageCount === 1 ? "" : "s"} — ${merged.lineItems.length} line${
+              merged.lineItems.length === 1 ? "" : "s"
+            }.`,
+          );
+          return;
+        }
+        const saved = updateInvoice(invoiceId, {
           fields: merged.fields,
           filledFromDefaults: merged.filledFromDefaults,
           lineItems: merged.lineItems,
@@ -372,6 +432,11 @@ export function GstApp() {
           pageCount: merged.pageCount,
           sourceName: merged.sourceName,
         });
+        if (!saved) {
+          setCapture({ phase: "idle" });
+          setPaywallOpen(true);
+          return;
+        }
         setEditingId(invoiceId);
         setCapture({ phase: "idle" });
         toast.success(
@@ -386,12 +451,15 @@ export function GstApp() {
         setCapture({ phase: "error", message });
       }
     },
-    [clearPreviews, extractDocuments, updateInvoice],
+    [clearPreviews, extractDocuments, insertInvoice, updateInvoice],
   );
 
   const handleSample = useCallback(async () => {
     hydrateGstStore();
-    const { makeSampleInvoice } = await import("@/lib/samples");
+    const [{ makeSampleInvoice }] = await Promise.all([
+      import("@/lib/samples"),
+      import("@/components/invoice-editor"),
+    ]);
     const invoice = makeSampleInvoice(useGstStore.getState().invoices.length);
     if (!insertInvoice(invoice, true)) return;
     toast.success("Sample invoice added to the register.");
@@ -399,7 +467,13 @@ export function GstApp() {
 
   const handleManual = useCallback(() => {
     hydrateGstStore();
-    const filled = applyFieldDefaults({ ...EMPTY_FIELDS }, useGstStore.getState().defaults);
+    const store = useGstStore.getState();
+    if (!canCapture(store.capturesUsed, store.isPro)) {
+      setPaywallOpen(true);
+      return;
+    }
+    void import("@/components/invoice-editor");
+    const filled = applyFieldDefaults({ ...EMPTY_FIELDS }, store.defaults);
     const invoice: GstInvoice = {
       id: newId(),
       sourceName: "Manual entry",
@@ -407,28 +481,91 @@ export function GstApp() {
       fields: filled.fields,
       filledFromDefaults: filled.applied.length ? filled.applied : undefined,
       lineItems: [],
+      pendingQuota: true,
     };
-    if (!insertInvoice(invoice, true)) return;
+    setManualDraft(invoice);
+    setEditingId(invoice.id);
     toast.message(
       filled.applied.length
-        ? "Blank row added with your field defaults."
-        : "Blank row added. Fill the GST fields.",
+        ? "Fill the GST fields. Defaults are in place."
+        : "Fill the GST fields.",
     );
-  }, [insertInvoice]);
+  }, []);
+
+  const closeEditor = useCallback(
+    (opts?: { saved?: boolean }) => {
+      const id = editingId;
+      setEditingId(null);
+      if (!id) return;
+      if (opts?.saved) {
+        setManualDraft((current) => (current?.id === id ? null : current));
+        return;
+      }
+      if (manualDraftRef.current?.id === id) setManualDraft(null);
+      hydrateGstStore();
+      const stored = useGstStore.getState().invoices.find((row) => row.id === id);
+      if (
+        stored?.pendingQuota === true &&
+        !hasMeaningfulInvoiceData(stored.fields, stored.lineItems, stored.filledFromDefaults)
+      ) {
+        useGstStore.getState().removeInvoice(id);
+      }
+    },
+    [editingId],
+  );
 
   const handleSave = useCallback(
     (fields: InvoiceFields, filledFromDefaults: InvoiceField[] | undefined, lineItems: LineItem[]) => {
-      if (editingId) {
-        updateInvoice(editingId, {
-          fields,
-          filledFromDefaults,
-          lineItems: pruneLineItems(lineItems),
-        });
+      if (saveLock.current) return;
+      saveLock.current = true;
+      try {
+        const id = editingId;
+        if (!id) return;
+        const lines = pruneLineItems(lineItems);
+        const meaningful = hasMeaningfulInvoiceData(fields, lines, filledFromDefaults);
+        const inStore = useGstStore.getState().invoices.some((invoice) => invoice.id === id);
+        const draft = manualDraftRef.current?.id === id ? manualDraftRef.current : null;
+
+        if (!meaningful) {
+          if (!inStore) {
+            toast.message("Add an invoice number, supplier, amount, or line item to save.");
+            return;
+          }
+          const saved = updateInvoice(id, { fields, filledFromDefaults, lineItems: lines });
+          if (!saved) {
+            setPaywallOpen(true);
+            return;
+          }
+          closeEditor({ saved: true });
+          toast.success("Row saved.");
+          return;
+        }
+
+        if (!inStore && draft) {
+          const invoice: GstInvoice = {
+            ...draft,
+            fields,
+            filledFromDefaults,
+            lineItems: lines,
+          };
+          if (!insertInvoice(invoice, false, true)) return;
+          closeEditor({ saved: true });
+          toast.success("Row saved.");
+          return;
+        }
+
+        const saved = updateInvoice(id, { fields, filledFromDefaults, lineItems: lines });
+        if (!saved) {
+          setPaywallOpen(true);
+          return;
+        }
+        closeEditor({ saved: true });
+        toast.success("Row saved.");
+      } finally {
+        saveLock.current = false;
       }
-      setEditingId(null);
-      toast.success("Row saved.");
     },
-    [editingId, updateInvoice],
+    [editingId, closeEditor, insertInvoice, updateInvoice],
   );
 
   const requestDelete = useCallback((id: string) => {
@@ -439,7 +576,9 @@ export function GstApp() {
   const confirmDelete = useCallback(() => {
     const id = pendingDeleteRef.current;
     if (!id) return;
-    removeInvoice(id);
+    const inStore = useGstStore.getState().invoices.some((invoice) => invoice.id === id);
+    if (inStore) removeInvoice(id);
+    setManualDraft((current) => (current?.id === id ? null : current));
     setSelectedIds((prev) => prev.filter((item) => item !== id));
     if (editingId === id) setEditingId(null);
     pendingDeleteRef.current = null;
@@ -465,7 +604,7 @@ export function GstApp() {
   const handleTally = useCallback(async () => {
     const rows = useGstStore.getState().invoices.filter((invoice) => selectedIds.includes(invoice.id));
     if (!rows.length) {
-      toast.message("Select purchase invoices first.");
+      toast.message("Select at least one purchase invoice, then download Tally XML.");
       return;
     }
     const { downloadTallyXml } = await import("@/lib/tally");
@@ -635,7 +774,7 @@ export function GstApp() {
             open={Boolean(editing)}
             busy={busy}
             onOpenChange={(open) => {
-              if (!open && !busy) setEditingId(null);
+              if (!open && !busy) closeEditor();
             }}
             onSave={handleSave}
             onDelete={() => editingId && requestDelete(editingId)}
@@ -686,7 +825,11 @@ export function GstApp() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove this invoice?</AlertDialogTitle>
             <AlertDialogDescription>
-              The row leaves the register. This does not restore a free capture.
+              {isPro
+                ? "The row leaves the register."
+                : pendingDeleteCharged
+                  ? "The row leaves the register. One free capture is returned."
+                  : "A free capture is used only when this invoice is saved. Removing it now leaves your quota unchanged."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

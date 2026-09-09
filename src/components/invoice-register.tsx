@@ -114,7 +114,15 @@ export function InvoiceRegister({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={onTally} disabled={!selectedIds.length}>
+          <Button
+            variant="outline"
+            onClick={onTally}
+            title={
+              selectedIds.length
+                ? `Download Tally XML for ${selectedIds.length} selected invoice${selectedIds.length === 1 ? "" : "s"}`
+                : "Select at least one purchase invoice first"
+            }
+          >
             <FileCode2 className="size-4" />
             Tally XML{selectedIds.length ? ` · ${selectedIds.length}` : ""}
           </Button>

@@ -40,6 +40,8 @@ export type GstInvoice = {
   filledFromDefaults?: InvoiceField[];
   lineItems: LineItem[];
   pageCount?: number;
+  /** True while a manual row has not yet used a free capture. */
+  pendingQuota?: boolean;
 };
 
 export const LINE_ITEM_FIELDS = [
@@ -484,6 +486,21 @@ export function countFilledFields(fields: InvoiceFields): number {
   return count;
 }
 
+/** User-entered invoice content, ignoring field defaults and blank lines. */
+export function hasMeaningfulInvoiceData(
+  fields: InvoiceFields,
+  lineItems: LineItem[],
+  filledFromDefaults?: InvoiceField[],
+): boolean {
+  if (pruneLineItems(lineItems).length > 0) return true;
+  const skipped = new Set(filledFromDefaults ?? []);
+  for (const key of INVOICE_FIELDS) {
+    if (skipped.has(key)) continue;
+    if (!isMissingValue(fields[key])) return true;
+  }
+  return false;
+}
+
 export function applyFieldDefaults(
   fields: InvoiceFields,
   defaults: InvoiceFields,
@@ -572,6 +589,7 @@ export function coerceInvoice(value: unknown): GstInvoice | null {
     filledFromDefaults: filled.length ? filled : undefined,
     lineItems: coerceLineItems(raw.lineItems),
     pageCount: typeof raw.pageCount === "number" && raw.pageCount > 0 ? raw.pageCount : undefined,
+    pendingQuota: raw.pendingQuota === true ? true : undefined,
   };
 }
 

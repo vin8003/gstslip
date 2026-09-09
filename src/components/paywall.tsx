@@ -79,13 +79,13 @@ export function Paywall({
             <div className="mt-6 flex items-end justify-between rounded-lg bg-muted px-4 py-3">
               <div>
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Annual
+                  Monthly
                 </p>
                 <p className="font-display text-3xl font-medium tabular-nums tracking-tight">
                   ₹{PRICE}
                 </p>
               </div>
-              <p className="pb-1 text-sm text-muted-foreground">per year</p>
+              <p className="pb-1 text-sm text-muted-foreground">per month</p>
             </div>
             <Button className="mt-5 w-full" size="lg" onClick={() => setStep("checkout")}>
               Continue to test checkout

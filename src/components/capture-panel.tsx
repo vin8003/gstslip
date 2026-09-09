@@ -68,6 +68,8 @@ export function CapturePanel({
   function warmCapture() {
     void import("@/lib/document");
     void import("@/lib/extract");
+    void import("@/lib/samples");
+    void import("@/components/invoice-editor");
   }
 
   function takeFiles(list: FileList | null) {
@@ -108,7 +110,7 @@ export function CapturePanel({
         type="file"
         accept={ACCEPT}
         multiple
-        className="hidden"
+        className="sr-only"
         onChange={(event) => {
           takeFiles(event.target.files);
           event.target.value = "";
@@ -119,7 +121,7 @@ export function CapturePanel({
         type="file"
         accept="image/*"
         capture="environment"
-        className="hidden"
+        className="sr-only"
         onChange={(event) => {
           takeFiles(event.target.files);
           event.target.value = "";
