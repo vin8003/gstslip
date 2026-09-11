@@ -8,31 +8,55 @@ const APP_NAME = "GSTSlip";
 const FONT_HREF =
   "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap";
 
+/** Same public-host gate the injector uses for og:image — no loopback, IPs, or Vercel system hosts. */
+function publicShareHost(hostHeader = ""): string {
+  const candidates = [String(import.meta.env.VITE_PUBLIC_HOSTNAME ?? ""), hostHeader];
+  for (const raw of candidates) {
+    const host = raw.split(",")[0].trim().split(":")[0].toLowerCase();
+    if (!host || !/^[a-z0-9.-]+$/.test(host) || !host.includes(".")) continue;
+    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) continue;
+    if (
+      host === "vercel.app" ||
+      host.endsWith(".vercel.app") ||
+      host === "vercel.com" ||
+      host.endsWith(".vercel.com")
+    ) {
+      continue;
+    }
+    return host;
+  }
+  return "";
+}
+
 export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: APP_NAME },
-      {
-        name: "description",
-        content:
-          "Photograph an India GST tax invoice, extract the fields, and export a CSV register.",
-      },
-      { name: "theme-color", content: "#0F4D44" },
-    ],
-    links: [
-      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
-      { rel: "stylesheet", href: appCss },
-      { rel: "manifest", href: "/__grok/manifest.webmanifest" },
-      { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-    ],
-  }),
+  head: () => {
+    const host = publicShareHost();
+    const xBanner = host ? `https://${host}/x-banner.jpg` : undefined;
+    return {
+      meta: [
+        { charSet: "utf-8" },
+        { name: "viewport", content: "width=device-width, initial-scale=1" },
+        { title: APP_NAME },
+        {
+          name: "description",
+          content:
+            "Photograph an India GST tax invoice, extract the fields, and export a CSV register.",
+        },
+        { name: "theme-color", content: "#0F4D44" },
+        ...(xBanner ? [{ property: "x:game:image", content: xBanner }] : []),
+      ],
+      links: [
+        { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+        { rel: "stylesheet", href: appCss },
+        { rel: "manifest", href: "/__grok/manifest.webmanifest" },
+        { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
+        { rel: "preconnect", href: "https://fonts.googleapis.com" },
+        { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      ],
+    };
+  },
   component: RootDocument,
 });
-
 function RootDocument() {
   return (
     <html lang="en-IN" suppressHydrationWarning>

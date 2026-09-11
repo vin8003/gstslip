@@ -2,24 +2,21 @@ import { createServerFn } from "@tanstack/react-start";
 import {
   AMOUNT_FIELDS,
   INVOICE_FIELDS,
-  LINE_ITEM_FIELDS,
   type InvoiceField,
-  type LineItemField,
 } from "./gst";
+import {
+  extractHasSignal,
+  messageText,
+  parseExtracted,
+  type ExtractErr,
+  type ExtractOk,
+  type ExtractResult,
+} from "./extract-parse";
+
+export type { ExtractErr, ExtractOk, ExtractResult };
+export { extractHasSignal, shouldRetryExtract } from "./extract-parse";
 
 export type ExtractPage = { imageBase64: string; mimeType: string };
-
-export type ExtractOk = {
-  ok: true;
-  isInvoice: boolean;
-  fields: Partial<Record<InvoiceField, string | number>>;
-  lineItems: Array<Partial<Record<LineItemField, string | number>>>;
-  notes: string;
-};
-
-export type ExtractErr = { ok: false; error: string };
-
-export type ExtractResult = ExtractOk | ExtractErr;
 
 export type ExtractInput = {
   pages: ExtractPage[];
@@ -29,11 +26,12 @@ export type ExtractInput = {
 
 const FAST_MODEL = "grok-4-fast";
 const FALLBACK_MODEL = "grok-4.5";
-let preferredModel = FAST_MODEL;
+const CALL_TIMEOUT_MS = 40_000;
+const MAX_TOKENS = 2800;
 
 const SYSTEM_PROMPT = `Extract India GST tax invoice JSON from THIS page only.
 Keys: is_invoice, notes, invoice_number, invoice_date, supplier_name, supplier_gstin, supplier_address, supplier_place, supplier_pincode, buyer_name, buyer_gstin, buyer_address, buyer_place, buyer_pincode, hsn_sac, taxable_value, cgst, sgst, igst, total_invoice_value, place_of_supply, irn, ack_no, ack_date, signed_qr, line_items[{description,hsn_sac,quantity,unit,rate,taxable_value,cgst,sgst,igst,line_total}].
-Unreadable text "". Unreadable amounts null. Never invent GSTIN, IRN, names, or amounts. Dates YYYY-MM-DD. Amounts as numbers. line_items = billed rows on this page only; skip totals/tax-summary rows.`;
+Unreadable text "". Unreadable amounts null. Never invent GSTIN, IRN, names, or amounts. Dates YYYY-MM-DD. Amounts as numbers. line_items = billed rows on this page only; skip totals/tax-summary rows. Return a single JSON object.`;
 
 function pageMessages(
   pages: Array<{ mime: string; raw: string }>,
@@ -44,7 +42,7 @@ function pageMessages(
     type: "image_url" as const,
     image_url: {
       url: `data:${page.mime};base64,${page.raw}`,
-      detail: pageIndex === 0 ? "auto" : "low",
+      detail: "auto" as const,
     },
   }));
   const hint =
@@ -83,7 +81,7 @@ export const extractInvoice = createServerFn({ method: "POST" })
       if (!page.raw || page.raw.length < 80) {
         return { ok: false, error: "A document image is empty." };
       }
-      if (page.raw.length > 900_000) {
+      if (page.raw.length > 1_200_000) {
         return { ok: false, error: "A page is too large. Photograph a tighter crop." };
       }
     }
@@ -108,32 +106,36 @@ async function extractOnePage(
   pageCount: number,
 ): Promise<ExtractResult> {
   const messages = pageMessages([page], pageIndex, pageCount);
-  const maxTokens = pageCount > 1 && pageIndex > 0 ? 1200 : 1600;
 
-  const first = await callModel(apiKey, preferredModel, messages, maxTokens, 18_000);
+  const first = await callModel(apiKey, FAST_MODEL, messages, true);
   if (first.kind === "ok") return first.result;
-  if (first.kind === "timeout") {
-    return { ok: false, error: "Extraction timed out. Try a tighter crop of the invoice." };
-  }
   if (first.kind === "auth") {
     return { ok: false, error: "Extraction is not authorised in this environment." };
   }
-  if (first.kind === "busy") {
-    return { ok: false, error: "Extraction is busy. Try again in a moment." };
-  }
-  if (first.kind === "network") {
-    return { ok: false, error: "Could not reach the extraction service. Try again." };
+
+  if (first.kind === "bad_model") {
+    const fallback = await callModel(apiKey, FALLBACK_MODEL, messages, false);
+    if (fallback.kind === "ok") return fallback.result;
+    return mapCallError(fallback);
   }
 
-  if (preferredModel !== FALLBACK_MODEL) {
-    preferredModel = FALLBACK_MODEL;
-    const second = await callModel(apiKey, FALLBACK_MODEL, messages, maxTokens, 20_000);
-    if (second.kind === "ok") return second.result;
-    if (second.kind === "timeout") {
-      return { ok: false, error: "Extraction timed out. Try a tighter crop of the invoice." };
-    }
+  return mapCallError(first);
+}
+
+function mapCallError(outcome: Exclude<CallOutcome, { kind: "ok" }>): ExtractErr {
+  if (outcome.kind === "timeout") {
+    return { ok: false, error: "This page timed out. Retry from the register row." };
   }
-  return { ok: false, error: "Extraction failed. Try a clearer photo." };
+  if (outcome.kind === "auth") {
+    return { ok: false, error: "Extraction is not authorised in this environment." };
+  }
+  if (outcome.kind === "busy") {
+    return { ok: false, error: "Extraction is busy. Retry in a moment." };
+  }
+  if (outcome.kind === "network") {
+    return { ok: false, error: "Could not reach the extraction service. Retry." };
+  }
+  return { ok: false, error: "Could not read this page. Try a clearer photo, then retry." };
 }
 
 type CallOutcome =
@@ -149,22 +151,19 @@ async function callModel(
   apiKey: string,
   model: string,
   messages: unknown,
-  maxTokens: number,
-  timeoutMs: number,
+  jsonMode: boolean,
 ): Promise<CallOutcome> {
+  const body: Record<string, unknown> = {
+    model,
+    temperature: 0,
+    max_tokens: MAX_TOKENS,
+    messages,
+  };
+  if (jsonMode) body.response_format = { type: "json_object" };
+
   let res: Response;
   try {
-    res = await fetchCompletions(
-      apiKey,
-      {
-        model,
-        temperature: 0,
-        max_tokens: maxTokens,
-        response_format: { type: "json_object" },
-        messages,
-      },
-      timeoutMs,
-    );
+    res = await fetchCompletions(apiKey, body, CALL_TIMEOUT_MS);
   } catch (error) {
     if (isAbortError(error)) return { kind: "timeout" };
     return { kind: "network" };
@@ -175,10 +174,13 @@ async function callModel(
   if (res.status === 429) return { kind: "busy" };
   if (!res.ok) return { kind: "fail", status: res.status };
 
-  const payload = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  const parsed = parseExtracted(payload.choices?.[0]?.message?.content ?? "");
+  let payload: { choices?: { message?: { content?: unknown }; finish_reason?: string }[] };
+  try {
+    payload = (await res.json()) as typeof payload;
+  } catch {
+    return { kind: "fail" };
+  }
+  const parsed = parseExtracted(messageText(payload.choices?.[0]?.message?.content ?? ""));
   if (!parsed.ok) return { kind: "fail" };
   return { kind: "ok", result: parsed };
 }
@@ -229,13 +231,13 @@ export function mergeExtractResults(parts: ExtractResult[]): ExtractResult {
       (part) => !part.ok && /timed out/i.test(part.error),
     );
     if (timeout) {
-      return { ok: false, error: "Extraction timed out. Try a tighter crop of the invoice." };
+      return { ok: false, error: "Extraction timed out. Retry from the register row." };
     }
     const first = parts.find((part): part is ExtractErr => !part.ok);
     return first ?? { ok: false, error: "Could not read this document." };
   }
 
-  const invoicePages = oks.filter((part) => part.isInvoice);
+  const invoicePages = oks.filter((part) => part.isInvoice || extractHasSignal(part));
   const usable = invoicePages.length ? invoicePages : oks;
   const fields: Partial<Record<InvoiceField, string | number>> = {};
 
@@ -284,52 +286,4 @@ export function mergeExtractResults(parts: ExtractResult[]): ExtractResult {
     lineItems: usable.flatMap((part) => part.lineItems),
     notes,
   };
-}
-
-function parseExtracted(content: string): ExtractResult {
-  const json = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  try {
-    const parsed = JSON.parse(json) as Record<string, unknown>;
-    const isInvoice = parsed.is_invoice !== false;
-    const fields: Partial<Record<InvoiceField, string | number>> = {};
-    for (const key of INVOICE_FIELDS) {
-      const value = parsed[key];
-      if (typeof value === "number" && Number.isFinite(value)) fields[key] = value;
-      else if (typeof value === "string" && value.trim()) fields[key] = value.trim();
-    }
-    return {
-      ok: true,
-      isInvoice,
-      fields,
-      lineItems: parseLineItems(parsed.line_items),
-      notes: typeof parsed.notes === "string" ? parsed.notes : "",
-    };
-  } catch {
-    return { ok: false, error: "Could not read structured fields from the document." };
-  }
-}
-
-function parseLineItems(
-  raw: unknown,
-): Array<Partial<Record<LineItemField, string | number>>> {
-  if (!Array.isArray(raw)) return [];
-  const items: Array<Partial<Record<LineItemField, string | number>>> = [];
-  for (const row of raw) {
-    if (!row || typeof row !== "object") continue;
-    const record = row as Record<string, unknown>;
-    const item: Partial<Record<LineItemField, string | number>> = {};
-    let hasValue = false;
-    for (const key of LINE_ITEM_FIELDS) {
-      const value = record[key];
-      if (typeof value === "number" && Number.isFinite(value)) {
-        item[key] = value;
-        hasValue = true;
-      } else if (typeof value === "string" && value.trim()) {
-        item[key] = value.trim();
-        hasValue = true;
-      }
-    }
-    if (hasValue) items.push(item);
-  }
-  return items;
 }

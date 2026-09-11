@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect } from "react";
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist, type PersistStorage } from "zustand/middleware";
 import {
   EMPTY_FIELDS,
   canCapture,
@@ -8,6 +8,7 @@ import {
   coerceInvoice,
   hasMeaningfulInvoiceData,
   type GstInvoice,
+  type InvoiceAnalysis,
   type InvoiceField,
   type InvoiceFields,
   type LineItem,
@@ -30,6 +31,7 @@ type GstState = {
       notes?: string;
       pageCount?: number;
       sourceName?: string;
+      analysis?: InvoiceAnalysis | null;
     },
   ) => boolean;
   removeInvoice: (id: string) => void;
@@ -89,6 +91,72 @@ function readPersisted(): Persisted | null {
   }
 }
 
+function stripAnalysis(invoice: GstInvoice): GstInvoice {
+  if (!invoice.analysis) return invoice;
+  return { ...invoice, analysis: undefined };
+}
+
+function persistable(state: GstState): Persisted {
+  return {
+    invoices: state.invoices.map(stripAnalysis),
+    capturesUsed: state.capturesUsed,
+    isPro: state.isPro,
+    defaults: state.defaults,
+  };
+}
+
+function createDebouncedPersistStorage(): PersistStorage<Persisted> {
+  const inner = localStorageOrNoop();
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let queued: { name: string; value: unknown } | null = null;
+
+  const flush = () => {
+    if (!queued) return;
+    const item = queued;
+    queued = null;
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    try {
+      inner.setItem(item.name, JSON.stringify(item.value));
+    } catch {
+      /* quota / private mode */
+    }
+  };
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") flush();
+    });
+  }
+
+  return {
+    getItem: (name) => {
+      try {
+        const raw = inner.getItem(name);
+        return raw ? (JSON.parse(raw) as { state: Persisted; version?: number }) : null;
+      } catch {
+        return null;
+      }
+    },
+    setItem: (name: string, value: unknown) => {
+      queued = { name, value };
+      if (timer) return;
+      timer = setTimeout(flush, 280);
+    },
+    removeItem: (name: string) => {
+      queued = null;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      inner.removeItem(name);
+    },
+  };
+}
+
 export const useGstStore = create<GstState>()(
   persist(
     (set, get) => ({
@@ -110,8 +178,9 @@ export const useGstStore = create<GstState>()(
       },
       updateInvoice: (id, patch) => {
         const { invoices, capturesUsed, isPro } = get();
-        const invoice = invoices.find((row) => row.id === id);
-        if (!invoice) return false;
+        const index = invoices.findIndex((row) => row.id === id);
+        if (index < 0) return false;
+        const invoice = invoices[index];
         const fields = patch.fields ?? invoice.fields;
         const lineItems = patch.lineItems ?? invoice.lineItems;
         const filled =
@@ -127,22 +196,24 @@ export const useGstStore = create<GstState>()(
           nextUsed = capturesUsed + 1;
           pendingQuota = false;
         }
-        set({
-          capturesUsed: nextUsed,
-          invoices: invoices.map((row) => {
-            if (row.id !== id) return row;
-            return {
-              ...row,
-              fields,
-              filledFromDefaults: filled,
-              lineItems,
-              notes: patch.notes !== undefined ? patch.notes || undefined : row.notes,
-              pageCount: patch.pageCount ?? row.pageCount,
-              sourceName: patch.sourceName ?? row.sourceName,
-              pendingQuota: pendingQuota || undefined,
-            };
-          }),
-        });
+        const next = invoices.slice();
+        next[index] = {
+          ...invoice,
+          fields,
+          filledFromDefaults: filled,
+          lineItems,
+          notes: patch.notes !== undefined ? patch.notes || undefined : invoice.notes,
+          pageCount: patch.pageCount ?? invoice.pageCount,
+          sourceName: patch.sourceName ?? invoice.sourceName,
+          pendingQuota: pendingQuota || undefined,
+          analysis:
+            patch.analysis === null
+              ? undefined
+              : patch.analysis !== undefined
+                ? patch.analysis
+                : invoice.analysis,
+        };
+        set({ capturesUsed: nextUsed, invoices: next });
         return true;
       },
       removeInvoice: (id) => {
@@ -162,13 +233,8 @@ export const useGstStore = create<GstState>()(
       name: STORAGE_KEY,
       version: 5,
       skipHydration: true,
-      storage: createJSONStorage(() => localStorageOrNoop()),
-      partialize: (state) => ({
-        invoices: state.invoices,
-        capturesUsed: state.capturesUsed,
-        isPro: state.isPro,
-        defaults: state.defaults,
-      }),
+      storage: createDebouncedPersistStorage(),
+      partialize: persistable,
       migrate: (persisted) => normalizePersisted(persisted),
       merge: (persisted, current) => ({
         ...current,

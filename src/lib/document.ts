@@ -1,8 +1,8 @@
 import { MAX_INVOICE_PAGES } from "./gst";
 
-const MAX_EDGE = 768;
-const JPEG_QUALITY = 0.55;
-const MAX_JPEG_BYTES = 280_000;
+const MAX_EDGE = 1280;
+const JPEG_QUALITIES = [0.76, 0.64, 0.52];
+const MAX_JPEG_BYTES = 420_000;
 
 type PdfJs = typeof import("pdfjs-dist");
 type PdfDocument = Awaited<ReturnType<PdfJs["getDocument"]>["promise"]>;
@@ -171,7 +171,7 @@ async function imageBitmap(file: File): Promise<ImageBitmap> {
   const resized = await createImageBitmap(bitmap, {
     resizeWidth: size.width,
     resizeHeight: size.height,
-    resizeQuality: "low",
+    resizeQuality: "medium",
   });
   bitmap.close();
   return resized;
@@ -224,7 +224,7 @@ async function renderPdfPage(pdf: PdfDocument, pageNumber: number): Promise<HTML
   const page = await pdf.getPage(pageNumber);
   try {
     const unscaled = page.getViewport({ scale: 1 });
-    const scale = Math.min(1.15, MAX_EDGE / Math.max(unscaled.width, unscaled.height, 1));
+    const scale = Math.min(1.85, MAX_EDGE / Math.max(unscaled.width, unscaled.height, 1));
     const viewport = page.getViewport({ scale });
     const canvas = document.createElement("canvas");
     canvas.width = Math.floor(viewport.width);
@@ -239,9 +239,12 @@ async function renderPdfPage(pdf: PdfDocument, pageNumber: number): Promise<HTML
 }
 
 async function canvasToJpegBlob(canvas: HTMLCanvasElement | OffscreenCanvas): Promise<Blob> {
-  const blob = await canvasToBlob(canvas, JPEG_QUALITY);
-  if (blob.size <= MAX_JPEG_BYTES) return blob;
-  return canvasToBlob(canvas, 0.42);
+  let last: Blob | null = null;
+  for (const quality of JPEG_QUALITIES) {
+    last = await canvasToBlob(canvas, quality);
+    if (last.size <= MAX_JPEG_BYTES) return last;
+  }
+  return last ?? canvasToBlob(canvas, JPEG_QUALITIES[JPEG_QUALITIES.length - 1]);
 }
 
 function canvasToBlob(

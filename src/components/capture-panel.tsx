@@ -1,12 +1,12 @@
 import { Camera, FileUp, ImagePlus, Keyboard, LoaderCircle } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { MAX_INVOICE_PAGES } from "@/lib/gst";
 import { cn } from "@/lib/utils";
 
 const ACCEPT = "image/jpeg,image/png,image/webp,application/pdf";
 
-export function CapturePanel({
+export const CapturePanel = memo(function CapturePanel({
   compact,
   remaining,
   isPro,
@@ -66,10 +66,7 @@ export function CapturePanel({
   }
 
   function warmCapture() {
-    void import("@/lib/document");
-    void import("@/lib/extract");
-    void import("@/lib/samples");
-    void import("@/components/invoice-editor");
+    void import("@/lib/document").then((m) => m.warmDocumentPipeline());
   }
 
   function takeFiles(list: FileList | null) {
@@ -262,4 +259,4 @@ export function CapturePanel({
       )}
     </section>
   );
-}
+});

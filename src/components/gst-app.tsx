@@ -29,6 +29,7 @@ import {
   fillMissingHeaderFromLines,
   formatInr,
   invoicePageCount,
+  isInvoiceAnalyzing,
   lineItemsFromExtract,
   newId,
   parseAmount,
@@ -42,7 +43,6 @@ import {
   type LineItem,
 } from "@/lib/gst";
 import { type GspIrnRecord } from "@/lib/gsp";
-import type { ExtractResult } from "@/lib/extract";
 import { hydrateGstStore, useGstStore, useGstStoreRestore } from "@/lib/store";
 
 const InvoiceEditor = lazy(() =>
@@ -112,7 +112,6 @@ export function GstApp() {
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const pendingDeleteRef = useRef<string | null>(null);
-  const extractGen = useRef(0);
   const previewUrlsRef = useRef<string[]>([]);
   const saveLock = useRef(false);
   const manualDraftRef = useRef<GstInvoice | null>(null);
@@ -170,67 +169,23 @@ export function GstApp() {
     return true;
   }, []);
 
-  const extractDocuments = useCallback(
-    async (files: File[], gen: number, maxPages: number, pageIndexOffset: number) => {
-      const documentMod = import("@/lib/document");
-      const extractMod = import("@/lib/extract");
-      const { filesToInvoicePages } = await documentMod;
-      const reads: Promise<ExtractResult>[] = [];
-      let finished = 0;
-      const pages = await filesToInvoicePages(
+  const preparePages = useCallback(
+    async (files: File[], maxPages: number, label: string) => {
+      const { filesToInvoicePages } = await import("@/lib/document");
+      previewUrlsRef.current = [];
+      return filesToInvoicePages(
         files,
         (page, index, total) => {
-          if (gen !== extractGen.current) return;
           previewUrlsRef.current[index] = page.previewUrl;
-          const pageCount = pageIndexOffset + total;
           setCapture({
             phase: "working",
             label:
-              pageCount > 1
-                ? `Reading page ${pageIndexOffset + index + 1} of ${pageCount}…`
-                : "Reading GST fields and line items…",
+              total > 1 ? `${label} ${index + 1} of ${total}…` : `${label}…`,
             previews: previewUrlsRef.current.filter(Boolean),
           });
-          reads[index] = extractMod
-            .then(({ extractInvoice }) =>
-              extractInvoice({
-                data: {
-                  pages: [{ imageBase64: page.base64, mimeType: page.mimeType }],
-                  pageIndex: pageIndexOffset + index,
-                  pageCount,
-                },
-              }),
-            )
-            .catch((error) => ({
-              ok: false as const,
-              error: error instanceof Error ? error.message : "This page could not be read.",
-            }))
-            .finally(() => {
-              finished += 1;
-              if (gen === extractGen.current && pageCount > 1) {
-                setCapture((current) =>
-                  current.phase === "working"
-                    ? { ...current, label: `Read ${finished} of ${pageCount} pages…` }
-                    : current,
-                );
-              }
-            });
         },
         maxPages,
       );
-      if (gen !== extractGen.current) {
-        for (const page of pages) URL.revokeObjectURL(page.previewUrl);
-        return null;
-      }
-      previewUrlsRef.current = pages.map((page) => page.previewUrl);
-      const { mergeExtractResults } = await extractMod;
-      const parts = await Promise.all(reads);
-      if (gen !== extractGen.current) return null;
-      return {
-        result: pages.length === 1 ? parts[0] : mergeExtractResults(parts),
-        pageCount: pages.length,
-        sourceName: sourceLabel(files, pages.length),
-      };
     },
     [],
   );
@@ -263,12 +218,9 @@ export function GstApp() {
         toast.message(`Using the first ${MAX_INVOICE_PAGES} pages of this invoice.`);
       }
 
-      const gen = ++extractGen.current;
-      clearPreviews();
       setCapture({
         phase: "working",
-        label:
-          files.length > 1 ? `Preparing ${files.length} files…` : "Preparing document…",
+        label: files.length > 1 ? `Uploading ${files.length} files…` : "Uploading document…",
         previews: [],
       });
       try {
@@ -278,64 +230,46 @@ export function GstApp() {
           setPaywallOpen(true);
           return;
         }
-        const extracted = await extractDocuments(files, gen, MAX_INVOICE_PAGES, 0);
-        if (!extracted || gen !== extractGen.current) return;
-        const { result, pageCount, sourceName } = extracted;
-        if (!result.ok) {
-          setCapture({ phase: "error", message: result.error });
-          return;
-        }
-        if (!result.isInvoice) {
-          setCapture({
-            phase: "error",
-            message:
-              result.notes ||
-              "That file does not look like a GST tax invoice. Try a clearer photo of the original. Nothing was captured.",
-          });
-          return;
-        }
-        hydrateGstStore();
-        const lineItems = lineItemsFromExtract(result.lineItems);
-        const filled = applyFieldDefaults(
-          fillMissingHeaderFromLines(fieldsFromExtract(result.fields), lineItems),
-          useGstStore.getState().defaults,
-        );
+        const pages = await preparePages(files, MAX_INVOICE_PAGES, "Uploading page");
+        const filled = applyFieldDefaults({ ...EMPTY_FIELDS }, useGstStore.getState().defaults);
         const invoice: GstInvoice = {
           id: newId(),
-          sourceName,
+          sourceName: sourceLabel(files, pages.length),
           capturedAt: new Date().toISOString(),
           fields: filled.fields,
-          notes: result.notes || undefined,
           filledFromDefaults: filled.applied.length ? filled.applied : undefined,
-          lineItems,
-          pageCount: pageCount > 1 ? pageCount : undefined,
+          lineItems: [],
+          pageCount: pages.length > 1 ? pages.length : undefined,
+          analysis: {
+            status: "running",
+            done: 0,
+            total: pages.length,
+            failed: 0,
+            label: `Queued — ${pages.length} page${pages.length === 1 ? "" : "s"}`,
+          },
         };
-        if (!insertInvoice(invoice, true)) {
+        previewUrlsRef.current = [];
+        if (!insertInvoice(invoice, false)) {
+          for (const page of pages) URL.revokeObjectURL(page.previewUrl);
           setCapture({ phase: "idle" });
           return;
         }
         setCapture({ phase: "idle" });
-        const extra = [
-          lineItems.length
-            ? `${lineItems.length} line${lineItems.length === 1 ? "" : "s"}`
-            : null,
-          filled.applied.length
-            ? `${filled.applied.length} default${filled.applied.length === 1 ? "" : "s"}`
-            : null,
-        ].filter(Boolean);
-        toast.success(
-          extra.length
-            ? `Invoice captured — ${extra.join(", ")}.`
-            : "Invoice captured — review the extracted fields.",
-        );
+        toast.message("Uploaded. Analysis is running in the background.");
+        const { startAnalysis } = await import("@/lib/analyze");
+        void startAnalysis({
+          invoiceId: invoice.id,
+          pages,
+          mode: "new",
+          pageIndexOffset: 0,
+        });
       } catch (error) {
-        if (gen !== extractGen.current) return;
         const message =
           error instanceof Error ? error.message : "Could not read this document.";
         setCapture({ phase: "error", message });
       }
     },
-    [clearPreviews, extractDocuments, insertInvoice],
+    [insertInvoice, preparePages],
   );
 
   const handleAddPages = useCallback(
@@ -345,6 +279,10 @@ export function GstApp() {
         store.invoices.find((invoice) => invoice.id === invoiceId) ??
         (manualDraftRef.current?.id === invoiceId ? manualDraftRef.current : undefined);
       if (!current) return;
+      if (isInvoiceAnalyzing(current)) {
+        toast.message("Wait for the current analysis to finish, then add more pages.");
+        return;
+      }
       const base: GstInvoice = live
         ? { ...current, fields: live.fields, lineItems: pruneLineItems(live.lineItems) }
         : current;
@@ -372,87 +310,61 @@ export function GstApp() {
         toast.message(`Adding ${slots} more page${slots === 1 ? "" : "s"} (max ${MAX_INVOICE_PAGES} per invoice).`);
       }
 
-      const gen = ++extractGen.current;
-      clearPreviews();
       setCapture({
         phase: "working",
-        label: `Adding pages to ${base.fields.invoice_number || "this invoice"}…`,
+        label: `Uploading pages to ${base.fields.invoice_number || "this invoice"}…`,
         previews: [],
       });
       try {
-        const extracted = await extractDocuments(files, gen, slots, invoicePageCount(base));
-        if (!extracted || gen !== extractGen.current) return;
-        const { result, pageCount, sourceName } = extracted;
-        if (!result.ok) {
-          setCapture({ phase: "error", message: result.error });
-          return;
-        }
-        if (!result.isInvoice) {
-          setCapture({
-            phase: "error",
-            message:
-              result.notes ||
-              "Those files do not look like GST invoice pages. Try a clearer photo.",
-          });
-          return;
-        }
-        const merged = appendExtractedPages(
-          base,
-          result,
-          pageCount,
-          sourceName,
-          useGstStore.getState().defaults,
-        );
+        const pages = await preparePages(files, slots, "Uploading page");
         const inStore = useGstStore.getState().invoices.some((invoice) => invoice.id === invoiceId);
         if (!inStore) {
-          const next: GstInvoice = { ...merged, pendingQuota: true };
-          setManualDraft(next);
-          if (!hasMeaningfulInvoiceData(next.fields, next.lineItems, next.filledFromDefaults)) {
-            setCapture({ phase: "idle" });
-            return;
-          }
-          if (!insertInvoice({ ...next, pendingQuota: undefined }, true, true)) {
-            setCapture({ phase: "idle" });
-            return;
-          }
-          setManualDraft(null);
+          toast.message("Save this invoice first, then add extra pages.");
+          for (const page of pages) URL.revokeObjectURL(page.previewUrl);
           setCapture({ phase: "idle" });
-          toast.success(
-            `Added ${pageCount} page${pageCount === 1 ? "" : "s"} — ${merged.lineItems.length} line${
-              merged.lineItems.length === 1 ? "" : "s"
-            }.`,
-          );
           return;
         }
         const saved = updateInvoice(invoiceId, {
-          fields: merged.fields,
-          filledFromDefaults: merged.filledFromDefaults,
-          lineItems: merged.lineItems,
-          notes: merged.notes,
-          pageCount: merged.pageCount,
-          sourceName: merged.sourceName,
+          pageCount: invoicePageCount(base) + pages.length,
+          sourceName: `${base.sourceName} + ${sourceLabel(files, pages.length)}`,
+          analysis: {
+            status: "running",
+            done: 0,
+            total: pages.length,
+            failed: 0,
+            label: `Queued — ${pages.length} extra page${pages.length === 1 ? "" : "s"}`,
+          },
         });
         if (!saved) {
+          for (const page of pages) URL.revokeObjectURL(page.previewUrl);
           setCapture({ phase: "idle" });
           setPaywallOpen(true);
           return;
         }
-        setEditingId(invoiceId);
+        previewUrlsRef.current = [];
         setCapture({ phase: "idle" });
-        toast.success(
-          `Added ${pageCount} page${pageCount === 1 ? "" : "s"} — ${merged.lineItems.length} line${
-            merged.lineItems.length === 1 ? "" : "s"
-          }.`,
-        );
+        toast.message("Extra pages uploaded. Analysis is running in the background.");
+        const { startAnalysis } = await import("@/lib/analyze");
+        void startAnalysis({
+          invoiceId,
+          pages,
+          mode: "append",
+          pageIndexOffset: invoicePageCount(base),
+        });
       } catch (error) {
-        if (gen !== extractGen.current) return;
         const message =
           error instanceof Error ? error.message : "Could not read those pages.";
         setCapture({ phase: "error", message });
       }
     },
-    [clearPreviews, extractDocuments, insertInvoice, updateInvoice],
+    [preparePages, updateInvoice],
   );
+
+  const handleRetryAnalysis = useCallback(async (invoiceId: string) => {
+    const { retryAnalysis } = await import("@/lib/analyze");
+    if (await retryAnalysis(invoiceId)) return;
+    toast.message("The uploaded files are no longer in memory. Upload the pages again.");
+  }, []);
 
   const handleSample = useCallback(async () => {
     hydrateGstStore();
@@ -577,7 +489,10 @@ export function GstApp() {
     const id = pendingDeleteRef.current;
     if (!id) return;
     const inStore = useGstStore.getState().invoices.some((invoice) => invoice.id === id);
-    if (inStore) removeInvoice(id);
+    if (inStore) {
+      void import("@/lib/analyze").then((mod) => mod.abortAnalysis(id));
+      removeInvoice(id);
+    }
     setManualDraft((current) => (current?.id === id ? null : current));
     setSelectedIds((prev) => prev.filter((item) => item !== id));
     if (editingId === id) setEditingId(null);
@@ -754,6 +669,7 @@ export function GstApp() {
           onEdit={setEditingId}
           onDelete={requestDelete}
           onAddPages={handleAddPages}
+          onRetry={handleRetryAnalysis}
           onExport={handleExport}
           onExportLines={handleExportLines}
           onTally={handleTally}

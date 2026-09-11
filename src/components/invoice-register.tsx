@@ -1,15 +1,16 @@
-import { memo, useMemo, useRef } from "react";
-import { FileCode2, FileSpreadsheet, ImagePlus, Pencil, Rows3, Trash2 } from "lucide-react";
+import { memo, useMemo, useRef, useSyncExternalStore } from "react";
+import { FileCode2, FileSpreadsheet, ImagePlus, LoaderCircle, Pencil, Rows3, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   AMOUNT_FIELDS,
+  CARD_FIELDS,
   FIELD_LABELS,
-  INVOICE_FIELDS,
   MAX_INVOICE_PAGES,
   REGISTER_FIELDS,
   displayDate,
   formatInr,
+  isInvoiceAnalyzing,
   pruneLineItems,
   remainingInvoicePages,
   type FieldIssue,
@@ -26,6 +27,20 @@ type Analyzed = {
   lineCount: number;
 };
 
+function subscribeWide(onStoreChange: () => void) {
+  const mq = window.matchMedia("(min-width: 768px)");
+  mq.addEventListener("change", onStoreChange);
+  return () => mq.removeEventListener("change", onStoreChange);
+}
+
+function wideSnapshot() {
+  return window.matchMedia("(min-width: 768px)").matches;
+}
+
+function useWideRegister() {
+  return useSyncExternalStore(subscribeWide, wideSnapshot, () => false);
+}
+
 export function InvoiceRegister({
   invoices,
   selectedIds,
@@ -35,6 +50,7 @@ export function InvoiceRegister({
   onEdit,
   onDelete,
   onAddPages,
+  onRetry,
   onExport,
   onExportLines,
   onTally,
@@ -47,6 +63,7 @@ export function InvoiceRegister({
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onAddPages: (id: string, files: File[]) => void;
+  onRetry?: (id: string) => void;
   onExport: () => void;
   onExportLines: () => void;
   onTally: () => void;
@@ -55,7 +72,7 @@ export function InvoiceRegister({
     () =>
       invoices.map((invoice) => ({
         invoice,
-        issues: validateInvoice(invoice.fields, invoice.lineItems),
+        issues: isInvoiceAnalyzing(invoice) ? [] : validateInvoice(invoice.fields, invoice.lineItems),
         lineCount: pruneLineItems(invoice.lineItems).length,
       })),
     [invoices],
@@ -63,11 +80,14 @@ export function InvoiceRegister({
   const lineTotal = analyzed.reduce((sum, row) => sum + row.lineCount, 0);
   const selected = new Set(selectedIds);
   const allSelected = invoices.length > 0 && selectedIds.length === invoices.length;
+  const wide = useWideRegister();
   const addInputRef = useRef<HTMLInputElement>(null);
   const addTargetRef = useRef<string | null>(null);
 
   function requestAddPages(id: string) {
     if (busy) return;
+    const invoice = invoices.find((row) => row.id === id);
+    if (invoice && isInvoiceAnalyzing(invoice)) return;
     addTargetRef.current = id;
     addInputRef.current?.click();
   }
@@ -137,22 +157,8 @@ export function InvoiceRegister({
         </div>
       </div>
 
-      <div className="space-y-3 md:hidden">
-        {analyzed.map((row) => (
-          <InvoiceCard
-            key={row.invoice.id}
-            row={row}
-            selected={selected.has(row.invoice.id)}
-            onToggle={() => onToggle(row.invoice.id)}
-            onEdit={() => onEdit(row.invoice.id)}
-            onAddPages={() => requestAddPages(row.invoice.id)}
-            onDelete={() => onDelete(row.invoice.id)}
-            busy={busy}
-          />
-        ))}
-      </div>
-
-      <div className="hidden overflow-hidden rounded-xl bg-card shadow-border md:block">
+      {wide ? (
+      <div className="overflow-hidden rounded-xl bg-card shadow-border">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[90rem] border-collapse text-left text-sm">
             <thead>
@@ -190,6 +196,7 @@ export function InvoiceRegister({
                   onToggle={onToggle}
                   onEdit={onEdit}
                   onAddPages={requestAddPages}
+                  onRetry={onRetry}
                   onDelete={onDelete}
                   busy={busy}
                 />
@@ -198,6 +205,23 @@ export function InvoiceRegister({
           </table>
         </div>
       </div>
+      ) : (
+      <div className="space-y-3">
+        {analyzed.map((row) => (
+          <InvoiceCard
+            key={row.invoice.id}
+            row={row}
+            selected={selected.has(row.invoice.id)}
+            onToggle={() => onToggle(row.invoice.id)}
+            onEdit={() => onEdit(row.invoice.id)}
+            onAddPages={() => requestAddPages(row.invoice.id)}
+            onRetry={onRetry}
+            onDelete={() => onDelete(row.invoice.id)}
+            busy={busy}
+          />
+        ))}
+      </div>
+      )}
     </section>
   );
 }
@@ -208,6 +232,7 @@ const InvoiceTableRow = memo(function InvoiceTableRow({
   onToggle,
   onEdit,
   onAddPages,
+  onRetry,
   onDelete,
   busy,
 }: {
@@ -216,6 +241,7 @@ const InvoiceTableRow = memo(function InvoiceTableRow({
   onToggle: (id: string) => void;
   onEdit: (id: string) => void;
   onAddPages: (id: string) => void;
+  onRetry?: (id: string) => void;
   onDelete: (id: string) => void;
   busy?: boolean;
 }) {
@@ -253,7 +279,15 @@ const InvoiceTableRow = memo(function InvoiceTableRow({
       ))}
       <td className="px-3 py-2 text-right" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-end gap-1">
-          {invoice.fields.irn ? <Badge variant="muted">IRN</Badge> : null}
+          {isInvoiceAnalyzing(invoice) ? (
+            <Badge variant="muted">
+              Analyzing {invoice.analysis?.done ?? 0}/{invoice.analysis?.total ?? 0}
+            </Badge>
+          ) : invoice.analysis?.status === "error" ? (
+            <Badge variant="warn">Analysis failed</Badge>
+          ) : invoice.fields.irn ? (
+            <Badge variant="muted">IRN</Badge>
+          ) : null}
           {lineCount ? (
             <Badge variant="muted">
               {lineCount} line{lineCount === 1 ? "" : "s"}
@@ -262,17 +296,26 @@ const InvoiceTableRow = memo(function InvoiceTableRow({
           {invoice.filledFromDefaults?.length ? (
             <Badge variant="muted">Defaults</Badge>
           ) : null}
-          {issues.length > 0 ? (
+          {isInvoiceAnalyzing(invoice) || invoice.analysis?.status === "error" ? null : issues.length > 0 ? (
             <Badge variant="warn">{issues.length}</Badge>
           ) : (
             <Badge variant="ok">OK</Badge>
           )}
+          {invoice.analysis?.status === "error" && onRetry ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onRetry(invoice.id)}
+            >
+              Retry
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
             size="icon"
             className="size-9"
             onClick={() => onAddPages(invoice.id)}
-            disabled={busy || remainingInvoicePages(invoice) <= 0}
+            disabled={busy || isInvoiceAnalyzing(invoice) || remainingInvoicePages(invoice) <= 0}
             aria-label={`Add pages (${remainingInvoicePages(invoice)} of ${MAX_INVOICE_PAGES} remaining)`}
           >
             <ImagePlus className="size-4" />
@@ -307,6 +350,7 @@ const InvoiceCard = memo(function InvoiceCard({
   onToggle,
   onEdit,
   onAddPages,
+  onRetry,
   onDelete,
   busy,
 }: {
@@ -315,6 +359,7 @@ const InvoiceCard = memo(function InvoiceCard({
   onToggle: () => void;
   onEdit: () => void;
   onAddPages: () => void;
+  onRetry?: (id: string) => void;
   onDelete: () => void;
   busy?: boolean;
 }) {
@@ -342,20 +387,27 @@ const InvoiceCard = memo(function InvoiceCard({
           </div>
         </div>
         <div className="flex flex-wrap justify-end gap-1">
-          {invoice.fields.irn ? <Badge variant="muted">IRN</Badge> : null}
+          {isInvoiceAnalyzing(invoice) ? (
+            <Badge variant="muted">Analyzing</Badge>
+          ) : invoice.analysis?.status === "error" ? (
+            <Badge variant="warn">Analysis failed</Badge>
+          ) : invoice.fields.irn ? (
+            <Badge variant="muted">IRN</Badge>
+          ) : null}
           {lineCount ? (
             <Badge variant="muted">
               {lineCount} line{lineCount === 1 ? "" : "s"}
             </Badge>
           ) : null}
           {invoice.filledFromDefaults?.length ? <Badge variant="muted">Defaults</Badge> : null}
-          {issues.length > 0 ? (
+          {isInvoiceAnalyzing(invoice) || invoice.analysis?.status === "error" ? null : issues.length > 0 ? (
             <Badge variant="warn">{issues.length} to review</Badge>
           ) : (
             <Badge variant="ok">Ready</Badge>
           )}
         </div>
       </div>
+      <AnalysisBanner invoice={invoice} onRetry={onRetry} />
       {previewLines.length ? (
         <ul className="mt-3 space-y-1 rounded-md bg-muted/50 px-3 py-2 text-sm">
           {previewLines.map((item) => (
@@ -374,20 +426,11 @@ const InvoiceCard = memo(function InvoiceCard({
         </ul>
       ) : null}
       <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 text-sm">
-        {INVOICE_FIELDS.filter(
-          (field) =>
-            field !== "invoice_number" &&
-            field !== "invoice_date" &&
-            field !== "signed_qr",
-        ).map((field) => (
+        {CARD_FIELDS.map((field) => (
           <div
             key={field}
             className={cn(
-              (field === "place_of_supply" ||
-                field === "hsn_sac" ||
-                field === "supplier_address" ||
-                field === "buyer_address" ||
-                field === "irn") &&
+              (field === "place_of_supply" || field === "supplier_name" || field === "buyer_name") &&
                 "col-span-2",
             )}
           >
@@ -416,7 +459,7 @@ const InvoiceCard = memo(function InvoiceCard({
         <Button
           variant="outline"
           onClick={onAddPages}
-          disabled={busy || remainingInvoicePages(invoice) <= 0}
+          disabled={busy || isInvoiceAnalyzing(invoice) || remainingInvoicePages(invoice) <= 0}
         >
           <ImagePlus className="size-4" />
           Pages
@@ -429,6 +472,40 @@ const InvoiceCard = memo(function InvoiceCard({
     </article>
   );
 });
+
+function AnalysisBanner({
+  invoice,
+  onRetry,
+}: {
+  invoice: GstInvoice;
+  onRetry?: (id: string) => void;
+}) {
+  const analysis = invoice.analysis;
+  if (!analysis || analysis.status === "complete") return null;
+  const pct = analysis.total ? Math.min(100, Math.round((analysis.done / analysis.total) * 100)) : 0;
+  const running = analysis.status === "running";
+  return (
+    <div className="mt-3 rounded-md bg-muted/70 px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex min-w-0 items-center gap-2 text-xs text-sage">
+          {running ? <LoaderCircle className="size-3.5 shrink-0 animate-spin" /> : null}
+          <span className="truncate">{analysis.label}</span>
+        </p>
+        {analysis.status === "error" && onRetry ? (
+          <Button type="button" size="sm" variant="outline" onClick={() => onRetry(invoice.id)}>
+            Retry
+          </Button>
+        ) : null}
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-border">
+        <div
+          className={cn("h-full rounded-full transition-[width]", running ? "bg-primary" : "bg-warn")}
+          style={{ width: `${pct || (running ? 8 : 0)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
 function shortLabel(field: InvoiceField): string {
   const map: Partial<Record<InvoiceField, string>> = {

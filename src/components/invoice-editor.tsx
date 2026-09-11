@@ -18,6 +18,7 @@ import {
   MAX_INVOICE_PAGES,
   applyLineTotalsToFields,
   displayDate,
+  isInvoiceAnalyzing,
   issuesByField,
   pruneLineItems,
   remainingDefaultFills,
@@ -107,8 +108,10 @@ export function InvoiceEditor({
               {stillDefaulted.map((field) => FIELD_LABELS[field]).join(", ")}
             </p>
           ) : null}
-          {busy ? (
-            <p className="mt-3 text-xs text-sage">Reading extra pages into this invoice…</p>
+          {busy || isInvoiceAnalyzing(invoice) ? (
+            <p className="mt-3 text-xs text-sage">
+              {invoice.analysis?.label || "Reading extra pages into this invoice…"}
+            </p>
           ) : null}
           {issues.length > 0 ? (
             <p className="mt-3 text-xs text-warn">
@@ -182,7 +185,7 @@ export function InvoiceEditor({
             <Button
               type="button"
               variant="outline"
-              disabled={busy || remainingInvoicePages(invoice) <= 0}
+              disabled={busy || isInvoiceAnalyzing(invoice) || remainingInvoicePages(invoice) <= 0}
               onClick={() => addInputRef.current?.click()}
             >
               <ImagePlus className="size-4" />

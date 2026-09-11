@@ -31,6 +31,14 @@ export type InvoiceField = (typeof INVOICE_FIELDS)[number];
 
 export type InvoiceFields = Record<InvoiceField, string>;
 
+export type InvoiceAnalysis = {
+  status: "running" | "error" | "complete";
+  done: number;
+  total: number;
+  failed: number;
+  label: string;
+};
+
 export type GstInvoice = {
   id: string;
   sourceName: string;
@@ -42,7 +50,12 @@ export type GstInvoice = {
   pageCount?: number;
   /** True while a manual row has not yet used a free capture. */
   pendingQuota?: boolean;
+  analysis?: InvoiceAnalysis;
 };
+
+export function isInvoiceAnalyzing(invoice: Pick<GstInvoice, "analysis">): boolean {
+  return invoice.analysis?.status === "running";
+}
 
 export const LINE_ITEM_FIELDS = [
   "description",
@@ -183,6 +196,16 @@ export const REGISTER_FIELDS: InvoiceField[] = [
   "cgst",
   "sgst",
   "igst",
+  "total_invoice_value",
+  "place_of_supply",
+];
+
+export const CARD_FIELDS: InvoiceField[] = [
+  "supplier_name",
+  "supplier_gstin",
+  "buyer_name",
+  "buyer_gstin",
+  "taxable_value",
   "total_invoice_value",
   "place_of_supply",
 ];
@@ -590,7 +613,30 @@ export function coerceInvoice(value: unknown): GstInvoice | null {
     lineItems: coerceLineItems(raw.lineItems),
     pageCount: typeof raw.pageCount === "number" && raw.pageCount > 0 ? raw.pageCount : undefined,
     pendingQuota: raw.pendingQuota === true ? true : undefined,
+    analysis: coerceAnalysis(raw.analysis),
   };
+}
+
+function coerceAnalysis(value: unknown): InvoiceAnalysis | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = value as Record<string, unknown>;
+  const total = typeof raw.total === "number" && raw.total > 0 ? raw.total : 0;
+  const done = typeof raw.done === "number" && raw.done > 0 ? raw.done : 0;
+  const failed = typeof raw.failed === "number" && raw.failed > 0 ? raw.failed : 0;
+  const label = typeof raw.label === "string" ? raw.label : "";
+  if (raw.status === "running" || raw.status === "queued") {
+    return {
+      status: "error",
+      done,
+      total,
+      failed,
+      label: "Analysis stopped. Retry from this row if the files are still available.",
+    };
+  }
+  if (raw.status === "error") {
+    return { status: "error", done, total, failed, label: label || "Analysis failed." };
+  }
+  return undefined;
 }
 
 export function sumLineField(items: LineItem[], field: LineItemField): number {
