@@ -10,33 +10,141 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as ApiCreateOrderRouteImport } from './routes/api/create-order'
+import { Route as ApiSessionBridgeRouteImport } from './routes/api/session-bridge'
+import { Route as ApiSocialStartRouteImport } from './routes/api/social-start'
+import { Route as ApiVerifyPaymentRouteImport } from './routes/api/verify-payment'
+import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiBillingRazorpayRouteImport } from './routes/api/billing.razorpay'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCreateOrderRoute = ApiCreateOrderRouteImport.update({
+  id: '/api/create-order',
+  path: '/api/create-order',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSessionBridgeRoute = ApiSessionBridgeRouteImport.update({
+  id: '/api/session-bridge',
+  path: '/api/session-bridge',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSocialStartRoute = ApiSocialStartRouteImport.update({
+  id: '/api/social-start',
+  path: '/api/social-start',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiVerifyPaymentRoute = ApiVerifyPaymentRouteImport.update({
+  id: '/api/verify-payment',
+  path: '/api/verify-payment',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
+  id: '/api/auth/$',
+  path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBillingRazorpayRoute = ApiBillingRazorpayRouteImport.update({
+  id: '/api/billing/razorpay',
+  path: '/api/billing/razorpay',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/profile': typeof ProfileRoute
+  '/api/create-order': typeof ApiCreateOrderRoute
+  '/api/session-bridge': typeof ApiSessionBridgeRoute
+  '/api/social-start': typeof ApiSocialStartRoute
+  '/api/verify-payment': typeof ApiVerifyPaymentRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/billing/razorpay': typeof ApiBillingRazorpayRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/profile': typeof ProfileRoute
+  '/api/create-order': typeof ApiCreateOrderRoute
+  '/api/session-bridge': typeof ApiSessionBridgeRoute
+  '/api/social-start': typeof ApiSocialStartRoute
+  '/api/verify-payment': typeof ApiVerifyPaymentRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/billing/razorpay': typeof ApiBillingRazorpayRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/profile': typeof ProfileRoute
+  '/api/create-order': typeof ApiCreateOrderRoute
+  '/api/session-bridge': typeof ApiSessionBridgeRoute
+  '/api/social-start': typeof ApiSocialStartRoute
+  '/api/verify-payment': typeof ApiVerifyPaymentRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/billing/razorpay': typeof ApiBillingRazorpayRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/profile'
+    | '/api/create-order'
+    | '/api/session-bridge'
+    | '/api/social-start'
+    | '/api/verify-payment'
+    | '/api/auth/$'
+    | '/api/billing/razorpay'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/login'
+    | '/profile'
+    | '/api/create-order'
+    | '/api/session-bridge'
+    | '/api/social-start'
+    | '/api/verify-payment'
+    | '/api/auth/$'
+    | '/api/billing/razorpay'
+  id:
+    | '__root__'
+    | '/'
+    | '/login'
+    | '/profile'
+    | '/api/create-order'
+    | '/api/session-bridge'
+    | '/api/social-start'
+    | '/api/verify-payment'
+    | '/api/auth/$'
+    | '/api/billing/razorpay'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  LoginRoute: typeof LoginRoute
+  ProfileRoute: typeof ProfileRoute
+  ApiCreateOrderRoute: typeof ApiCreateOrderRoute
+  ApiSessionBridgeRoute: typeof ApiSessionBridgeRoute
+  ApiSocialStartRoute: typeof ApiSocialStartRoute
+  ApiVerifyPaymentRoute: typeof ApiVerifyPaymentRoute
+  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiBillingRazorpayRoute: typeof ApiBillingRazorpayRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +156,75 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/create-order': {
+      id: '/api/create-order'
+      path: '/api/create-order'
+      fullPath: '/api/create-order'
+      preLoaderRoute: typeof ApiCreateOrderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/session-bridge': {
+      id: '/api/session-bridge'
+      path: '/api/session-bridge'
+      fullPath: '/api/session-bridge'
+      preLoaderRoute: typeof ApiSessionBridgeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/social-start': {
+      id: '/api/social-start'
+      path: '/api/social-start'
+      fullPath: '/api/social-start'
+      preLoaderRoute: typeof ApiSocialStartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/verify-payment': {
+      id: '/api/verify-payment'
+      path: '/api/verify-payment'
+      fullPath: '/api/verify-payment'
+      preLoaderRoute: typeof ApiVerifyPaymentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/$': {
+      id: '/api/auth/$'
+      path: '/api/auth/$'
+      fullPath: '/api/auth/$'
+      preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/billing/razorpay': {
+      id: '/api/billing/razorpay'
+      path: '/api/billing/razorpay'
+      fullPath: '/api/billing/razorpay'
+      preLoaderRoute: typeof ApiBillingRazorpayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  LoginRoute: LoginRoute,
+  ProfileRoute: ProfileRoute,
+  ApiCreateOrderRoute: ApiCreateOrderRoute,
+  ApiSessionBridgeRoute: ApiSessionBridgeRoute,
+  ApiSocialStartRoute: ApiSocialStartRoute,
+  ApiVerifyPaymentRoute: ApiVerifyPaymentRoute,
+  ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiBillingRazorpayRoute: ApiBillingRazorpayRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

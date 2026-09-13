@@ -1,5 +1,7 @@
-import { Check, CreditCard, Landmark, Shield } from "lucide-react";
-import { useState } from "react";
+import { Check, LoaderCircle, Shield } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -8,15 +10,41 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { openRazorpayCheckout } from "@/lib/billing/checkout";
+import { PLAN_PRICE_INR, type BillingSnapshot } from "@/lib/billing/plan";
+import { markPaywallReturn, PAYWALL_RETURN_PATH } from "@/lib/billing/paywall-return";
+import {
+  confirmCheckout,
+  getEntitlement,
+  isUnauthorized,
+  startSubscription,
+} from "@/lib/billing/store";
 import { FREE_CAPTURES } from "@/lib/gst";
-import { cn } from "@/lib/utils";
+import {
+  CANONICAL_APP_HOST,
+  PAYMENT_APP_HOST,
+} from "@/lib/public-origins";
 
-const PRICE = 499;
+type Step = "plan" | "done";
 
-type Step = "plan" | "checkout" | "done";
+function formatDay(iso: string | null): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return iso.slice(0, 10);
+  }
+}
+
+function failMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error && err.message && !/unauthorized/i.test(err.message)) return err.message;
+  return fallback;
+}
 
 export function Paywall({
   open,
@@ -25,11 +53,26 @@ export function Paywall({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onUnlock: () => void;
+  onUnlock: (snap: BillingSnapshot) => void;
 }) {
+  const navigate = useNavigate();
+  const { user, isPending } = useCurrentUserState();
   const [step, setStep] = useState<Step>("plan");
-  const [method, setMethod] = useState<"upi" | "card">("upi");
   const [busy, setBusy] = useState(false);
+  const [snap, setSnap] = useState<BillingSnapshot | null>(null);
+  const signedIn = Boolean(user) && !user?.isDevFallback;
+
+  useEffect(() => {
+    if (!open || !signedIn) return;
+    getEntitlement()
+      .then((next) => {
+        setSnap(next);
+        if (next.isPro) setStep("done");
+      })
+      .catch((err) => {
+        if (isUnauthorized(err)) return;
+      });
+  }, [open, signedIn]);
 
   function handleOpenChange(next: boolean) {
     if (!next) {
@@ -39,17 +82,82 @@ export function Paywall({
     onOpenChange(next);
   }
 
-  async function completeTestPay() {
-    setBusy(true);
-    await new Promise((resolve) => setTimeout(resolve, 900));
-    setBusy(false);
-    setStep("done");
-    onUnlock();
+  function goSignIn() {
+    markPaywallReturn();
+    handleOpenChange(false);
+    if (typeof window !== "undefined" && window.location.hostname === CANONICAL_APP_HOST) {
+      window.location.assign(
+        `https://${PAYMENT_APP_HOST}/login?next=${encodeURIComponent(PAYWALL_RETURN_PATH)}`,
+      );
+      return;
+    }
+    void navigate({ to: "/login", search: { next: PAYWALL_RETURN_PATH } });
   }
+
+  async function subscribe() {
+    if (!signedIn) {
+      goSignIn();
+      return;
+    }
+    if (typeof window !== "undefined" && window.location.hostname === CANONICAL_APP_HOST) {
+      window.location.assign(
+        `/api/session-bridge?next=${encodeURIComponent(PAYWALL_RETURN_PATH)}&to=${PAYMENT_APP_HOST}`,
+      );
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await startSubscription();
+      setSnap(result.snap);
+      if (result.kind === "unset") {
+        toast.error("Payments are not connected yet. Pro cannot take money until they are.");
+        return;
+      }
+      if (result.kind === "preview" || result.kind === "active") {
+        setStep("done");
+        onUnlock(result.snap);
+        return;
+      }
+      if (result.kind === "covered") {
+        setStep("done");
+        onUnlock(result.snap);
+        toast.message(`Pro stays on until ${formatDay(result.snap.periodEnd)}.`);
+        return;
+      }
+      const paid = await openRazorpayCheckout(result.checkout);
+      if (!paid) {
+        toast.message("Payment cancelled. Pro did not unlock.");
+        return;
+      }
+      const next = await confirmCheckout({ data: paid });
+      setSnap(next);
+      setStep("done");
+      onUnlock(next);
+    } catch (err) {
+      if (isUnauthorized(err)) {
+        goSignIn();
+        return;
+      }
+      toast.error(failMessage(err, "Could not open payment."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const live = Boolean(snap?.paymentsLive);
+  const cta = !signedIn
+    ? "Sign in to upgrade"
+    : busy
+      ? live
+        ? "Opening Razorpay…"
+        : "Unlocking…"
+      : live
+        ? `Pay ₹${PLAN_PRICE_INR}`
+        : "Unlock Pro on this preview";
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md p-0" showClose={step !== "checkout"}>
+      <DialogContent className="max-w-md p-0">
         {step === "plan" ? (
           <div className="p-5">
             <DialogHeader>
@@ -79,103 +187,33 @@ export function Paywall({
             <div className="mt-6 flex items-end justify-between rounded-lg bg-muted px-4 py-3">
               <div>
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Monthly
+                  Each payment
                 </p>
                 <p className="font-display text-3xl font-medium tabular-nums tracking-tight">
-                  ₹{PRICE}
+                  ₹{PLAN_PRICE_INR}
                 </p>
               </div>
-              <p className="pb-1 text-sm text-muted-foreground">per month</p>
+              <p className="pb-1 text-sm text-muted-foreground">for 30 days</p>
             </div>
-            <Button className="mt-5 w-full" size="lg" onClick={() => setStep("checkout")}>
-              Continue to test checkout
+            <Button
+              className="mt-5 w-full"
+              size="lg"
+              disabled={busy || isPending}
+              onClick={() => void subscribe()}
+            >
+              {busy ? <LoaderCircle className="size-4 animate-spin" /> : null}
+              {cta}
             </Button>
-            <p className="mt-3 text-center text-xs text-muted-foreground">
-              Razorpay test checkout stub. No charge is made.
+            <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
+              <Shield className="size-3.5 shrink-0" />
+              {!signedIn
+                ? "Sign in to buy Pro. Capture still works without an account."
+                : live
+                  ? snap?.paymentsMode === "test"
+                    ? "Razorpay test mode. Use test cards, not live UPI."
+                    : "UPI, card, or netbanking. This charges a real ₹499. Test cards fail on live keys."
+                  : "This preview records Pro on your account. No charge is made until Razorpay is connected."}
             </p>
-          </div>
-        ) : null}
-
-        {step === "checkout" ? (
-          <div>
-            <div className="flex items-center justify-between bg-primary px-5 py-4 text-primary-foreground">
-              <div>
-                <p className="text-xs uppercase tracking-[0.14em] text-primary-foreground/70">
-                  Test checkout
-                </p>
-                <p className="font-medium">GSTSlip Pro</p>
-              </div>
-              <p className="font-display text-2xl tabular-nums">₹{PRICE}</p>
-            </div>
-            <div className="p-5">
-              <p className="text-sm text-muted-foreground">
-                Simulated Razorpay checkout for this preview. Nothing is charged
-                and no card details leave this device.
-              </p>
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setMethod("upi")}
-                  className={cn(
-                    "flex h-11 items-center justify-center gap-2 rounded-md text-sm font-medium transition-[background-color,box-shadow] duration-150",
-                    method === "upi"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-foreground",
-                  )}
-                >
-                  <Landmark className="size-4" />
-                  UPI
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMethod("card")}
-                  className={cn(
-                    "flex h-11 items-center justify-center gap-2 rounded-md text-sm font-medium transition-[background-color,box-shadow] duration-150",
-                    method === "card"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-foreground",
-                  )}
-                >
-                  <CreditCard className="size-4" />
-                  Card
-                </button>
-              </div>
-              <div className="mt-4 space-y-3">
-                {method === "upi" ? (
-                  <div className="space-y-1.5">
-                    <Label htmlFor="upi-id">UPI ID</Label>
-                    <Input id="upi-id" defaultValue="ca@okaxis" autoComplete="off" />
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="col-span-2 space-y-1.5">
-                      <Label htmlFor="card-num">Card number</Label>
-                      <Input
-                        id="card-num"
-                        defaultValue="4111 1111 1111 1111"
-                        autoComplete="off"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="card-exp">Expiry</Label>
-                      <Input id="card-exp" defaultValue="12/28" autoComplete="off" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="card-cvv">CVV</Label>
-                      <Input id="card-cvv" defaultValue="123" autoComplete="off" />
-                    </div>
-                  </div>
-                )}
-              </div>
-              <Separator className="my-4" />
-              <Button className="w-full" size="lg" disabled={busy} onClick={completeTestPay}>
-                {busy ? "Processing test payment…" : `Pay ₹${PRICE}`}
-              </Button>
-              <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-                <Shield className="size-3.5" />
-                Test mode · Razorpay stub
-              </p>
-            </div>
           </div>
         ) : null}
 
@@ -187,7 +225,9 @@ export function Paywall({
             <DialogHeader className="mt-4 items-center pr-0">
               <DialogTitle>GSTSlip Pro is on</DialogTitle>
               <DialogDescription>
-                Unlimited captures are unlocked on this device.
+                {snap?.periodEnd
+                  ? `Unlimited captures until ${formatDay(snap.periodEnd)}.`
+                  : "Unlimited captures are unlocked on this account."}
               </DialogDescription>
             </DialogHeader>
             <Button className="mt-6 w-full" onClick={() => handleOpenChange(false)}>

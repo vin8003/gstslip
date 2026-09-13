@@ -46,6 +46,7 @@ import {
   PREVIEW_CLIENT_ID,
   PREVIEW_CLIENT_SECRET,
 } from "./preview";
+import { PUBLIC_APP_ORIGINS } from "../public-origins";
 
 // Kick (and share) PGLite bootstrap as soon as the auth server module loads.
 void ensureDbReady();
@@ -115,9 +116,12 @@ const baseURL = explicitBaseURL ?? {
 
 // Origins Better Auth accepts on credentialed POSTs (sign-up/sign-in, etc.).
 // Missing entries here surface as FORBIDDEN "Invalid origin".
+// Public custom domains are a product allowlist (gstslip.vin8003.com) — CSRF
+// stays on; do not disable origin checks to make a host work.
 const trustedOrigins: string[] = explicitBaseURL
-  ? [explicitBaseURL, ...LOCAL_DEV_ORIGINS]
+  ? [...PUBLIC_APP_ORIGINS, explicitBaseURL, ...LOCAL_DEV_ORIGINS]
   : [
+      ...PUBLIC_APP_ORIGINS,
       // Host wildcards (matched against Origin's host)
       ...previewAllowedHosts,
       // Full-origin wildcards (matched against Origin)

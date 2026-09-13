@@ -36,6 +36,7 @@ type GstState = {
   ) => boolean;
   removeInvoice: (id: string) => void;
   unlockPro: () => void;
+  setPro: (isPro: boolean) => void;
   setDefaults: (defaults: InvoiceFields) => void;
 };
 
@@ -227,6 +228,7 @@ export const useGstStore = create<GstState>()(
         });
       },
       unlockPro: () => set({ isPro: true }),
+      setPro: (isPro) => set({ isPro: Boolean(isPro) }),
       setDefaults: (defaults) => set({ defaults: coerceFields(defaults) }),
     }),
     {

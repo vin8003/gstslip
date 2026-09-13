@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LoaderCircle, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
+import { AccountBar } from "@/components/account-bar";
 import { CapturePanel } from "@/components/capture-panel";
 import { InvoiceRegister } from "@/components/invoice-register";
 import { SlipMark } from "@/components/mark";
@@ -44,6 +45,9 @@ import {
 } from "@/lib/gst";
 import { type GspIrnRecord } from "@/lib/gsp";
 import { hydrateGstStore, useGstStore, useGstStoreRestore } from "@/lib/store";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { consumePaywallReturn, consumeUpgradeQuery } from "@/lib/billing/paywall-return";
+import { getEntitlement, isUnauthorized } from "@/lib/billing/store";
 
 const InvoiceEditor = lazy(() =>
   import("@/components/invoice-editor").then((m) => ({ default: m.InvoiceEditor })),
@@ -80,13 +84,14 @@ function sourceLabel(files: File[], pageCount: number): string {
 
 export function GstApp() {
   useGstStoreRestore();
+  const { user, isPending: userPending } = useCurrentUserState();
   const invoices = useGstStore((s) => s.invoices);
   const capturesUsed = useGstStore((s) => s.capturesUsed);
   const isPro = useGstStore((s) => s.isPro);
   const defaults = useGstStore((s) => s.defaults);
   const updateInvoice = useGstStore((s) => s.updateInvoice);
   const removeInvoice = useGstStore((s) => s.removeInvoice);
-  const unlockPro = useGstStore((s) => s.unlockPro);
+  const setPro = useGstStore((s) => s.setPro);
   const setDefaults = useGstStore((s) => s.setDefaults);
 
   useEffect(() => {
@@ -116,6 +121,21 @@ export function GstApp() {
   const saveLock = useRef(false);
   const manualDraftRef = useRef<GstInvoice | null>(null);
   manualDraftRef.current = manualDraft;
+
+  useEffect(() => {
+    if (consumePaywallReturn() || consumeUpgradeQuery()) setPaywallOpen(true);
+  }, []);
+
+  useEffect(() => {
+    if (userPending || !user || user.isDevFallback) return;
+    getEntitlement()
+      .then((snap) => {
+        setPro(snap.isPro);
+      })
+      .catch((err) => {
+        if (isUnauthorized(err)) return;
+      });
+  }, [user, userPending, setPro]);
 
   const remaining = remainingCaptures(capturesUsed, isPro);
   const editing =
@@ -568,7 +588,7 @@ export function GstApp() {
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-30 border-b border-border/80 bg-background/90 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-2.5">
             <SlipMark />
             <div>
@@ -578,7 +598,7 @@ export function GstApp() {
               <p className="text-xs text-muted-foreground">India GST invoice capture</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
             <Button
               variant="ghost"
               size="sm"
@@ -586,24 +606,30 @@ export function GstApp() {
               aria-label="Field defaults"
             >
               <SlidersHorizontal className="size-4" />
-              <span>
+              <span className="hidden sm:inline">
                 Defaults{defaultCount ? ` · ${defaultCount}` : ""}
               </span>
             </Button>
             {isPro ? (
               <Badge>Pro</Badge>
             ) : (
-              <button type="button" onClick={() => remaining <= 0 && setPaywallOpen(true)}>
+              <button type="button" onClick={() => setPaywallOpen(true)}>
                 <Badge variant={remaining <= 0 ? "warn" : "muted"}>
-                  {`${Math.min(capturesUsed, FREE_CAPTURES)} of ${FREE_CAPTURES} free`}
+                  {`${Math.min(capturesUsed, FREE_CAPTURES)} of ${FREE_CAPTURES}`}
                 </Badge>
               </button>
             )}
             {!isPro ? (
-              <Button variant="ghost" size="sm" onClick={() => setPaywallOpen(true)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="hidden sm:inline-flex"
+                onClick={() => setPaywallOpen(true)}
+              >
                 Upgrade
               </Button>
             ) : null}
+            <AccountBar />
           </div>
         </div>
       </header>
@@ -720,9 +746,13 @@ export function GstApp() {
           <Paywall
             open={paywallOpen}
             onOpenChange={setPaywallOpen}
-            onUnlock={() => {
-              unlockPro();
-              toast.success("GSTSlip Pro unlocked on this device.");
+            onUnlock={(snap) => {
+              setPro(snap.isPro);
+              toast.success(
+                snap.paymentsLive
+                  ? "GSTSlip Pro is on. This payment covers 30 days."
+                  : "GSTSlip Pro unlocked on this account for 30 days.",
+              );
             }}
           />
         ) : null}
