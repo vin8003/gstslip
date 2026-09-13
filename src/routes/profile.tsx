@@ -13,6 +13,7 @@ import { markPaywallReturn } from "@/lib/billing/paywall-return";
 import { cancelSubscription, getEntitlement, isUnauthorized } from "@/lib/billing/store";
 import { getAdminAccess } from "@/lib/admin/desk";
 import { FREE_CAPTURES, remainingCaptures } from "@/lib/gst";
+import { refreshQuota } from "@/lib/quota/client";
 import { useGstStore } from "@/lib/store";
 
 const subscribeToNothing = () => () => {};
@@ -68,6 +69,7 @@ function ProfilePage() {
     getAdminAccess()
       .then((access) => setAdminAllowed(access.allowed))
       .catch(() => setAdminAllowed(false));
+    void refreshQuota();
   }, [signedIn, navigate, setPro]);
 
   if (isPending) {
@@ -121,9 +123,14 @@ function ProfilePage() {
             <p className="text-xs text-muted-foreground">Profile</p>
           </div>
         </Link>
-        <Button variant="ghost" size="sm" asChild>
-          <Link to="/">Register</Link>
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/history">History</Link>
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/">Register</Link>
+          </Button>
+        </div>
       </div>
 
       <section className="rounded-xl border border-border bg-card p-5 shadow-border">
@@ -183,7 +190,8 @@ function ProfilePage() {
 
         {!pro && remaining !== Number.POSITIVE_INFINITY ? (
           <p className="mt-4 text-sm text-muted-foreground">
-            {remaining} free capture{remaining === 1 ? "" : "s"} left on this device.
+            {remaining} free capture{remaining === 1 ? "" : "s"} left on this account.
+            Sign-out does not reset the count.
           </p>
         ) : null}
 

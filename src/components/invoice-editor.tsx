@@ -136,6 +136,7 @@ export function InvoiceEditor({
               (group) =>
                 group.title !== "Tax heads" &&
                 group.title !== "Supply" &&
+                group.title !== "Transport" &&
                 group.title !== "e-Invoice",
             ),
             draft,
@@ -151,7 +152,9 @@ export function InvoiceEditor({
           />
 
           {renderGroups(
-            FIELD_GROUPS.filter((group) => group.title === "Tax heads" || group.title === "Supply"),
+            FIELD_GROUPS.filter((group) =>
+              group.title === "Tax heads" || group.title === "Supply" || group.title === "Transport",
+            ),
             draft,
             byField,
             defaultSet,
@@ -166,8 +169,15 @@ export function InvoiceEditor({
             setField,
           )}
 
-          <DialogFooter className="sticky bottom-0 border-t border-border bg-card pt-4">
-            <Button type="button" variant="destructive" className="sm:mr-auto" onClick={onDelete} disabled={busy}>
+          <DialogFooter className="sticky bottom-0 -mx-5 mt-2 flex-col gap-2 border-t border-border bg-card px-5 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              className="w-full sm:mr-auto sm:w-auto"
+              onClick={onDelete}
+              disabled={busy}
+            >
               Delete
             </Button>
             <input
@@ -185,6 +195,8 @@ export function InvoiceEditor({
             <Button
               type="button"
               variant="outline"
+              size="sm"
+              className="w-full sm:w-auto"
               disabled={busy || isInvoiceAnalyzing(invoice) || remainingInvoicePages(invoice) <= 0}
               onClick={() => addInputRef.current?.click()}
             >
@@ -194,10 +206,19 @@ export function InvoiceEditor({
                 ? ` · ${remainingInvoicePages(invoice)} left`
                 : ""}
             </Button>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full sm:w-auto"
+              onClick={() => onOpenChange(false)}
+              disabled={busy}
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={busy}>Save row</Button>
+            <Button type="submit" size="sm" className="w-full sm:w-auto" disabled={busy}>
+              Save row
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

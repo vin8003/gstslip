@@ -1,5 +1,5 @@
 import { memo, useMemo, useRef, useSyncExternalStore } from "react";
-import { FileCode2, FileSpreadsheet, ImagePlus, LoaderCircle, Pencil, Rows3, Trash2 } from "lucide-react";
+import { FileCode2, FileSpreadsheet, ImagePlus, LoaderCircle, Pencil, Rows3, Trash2, Download } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,6 +54,7 @@ export function InvoiceRegister({
   onExport,
   onExportLines,
   onTally,
+  onDownloadOriginal,
 }: {
   invoices: GstInvoice[];
   selectedIds: string[];
@@ -67,6 +68,7 @@ export function InvoiceRegister({
   onExport: () => void;
   onExportLines: () => void;
   onTally: () => void;
+  onDownloadOriginal?: (id: string) => void;
 }) {
   const analyzed = useMemo<Analyzed[]>(
     () =>
@@ -101,7 +103,7 @@ export function InvoiceRegister({
         </h2>
         <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
           Captured invoices appear here as one row each, with line items,
-          addresses, and IRN on the invoice. Export CSV or Tally XML when ready.
+          addresses, and IRN on the invoice. Export CSV or TallyPrime XML when ready.
         </p>
       </section>
     );
@@ -139,12 +141,12 @@ export function InvoiceRegister({
             onClick={onTally}
             title={
               selectedIds.length
-                ? `Download Tally XML for ${selectedIds.length} selected invoice${selectedIds.length === 1 ? "" : "s"}`
+                ? `Download TallyPrime XML (Data Interchange) for ${selectedIds.length} selected invoice${selectedIds.length === 1 ? "" : "s"}`
                 : "Select at least one purchase invoice first"
             }
           >
             <FileCode2 className="size-4" />
-            Tally XML{selectedIds.length ? ` · ${selectedIds.length}` : ""}
+            TallyPrime XML{selectedIds.length ? ` · ${selectedIds.length}` : ""}
           </Button>
           <Button variant="outline" onClick={onExport}>
             <FileSpreadsheet className="size-4" />
@@ -160,7 +162,7 @@ export function InvoiceRegister({
       {wide ? (
       <div className="overflow-hidden rounded-xl bg-card shadow-border">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[90rem] border-collapse text-left text-sm">
+          <table className="w-full min-w-[96rem] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/60 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 <th className="w-12 px-3 py-3">
@@ -198,6 +200,7 @@ export function InvoiceRegister({
                   onAddPages={requestAddPages}
                   onRetry={onRetry}
                   onDelete={onDelete}
+                  onDownloadOriginal={onDownloadOriginal}
                   busy={busy}
                 />
               ))}
@@ -217,6 +220,7 @@ export function InvoiceRegister({
             onAddPages={() => requestAddPages(row.invoice.id)}
             onRetry={onRetry}
             onDelete={() => onDelete(row.invoice.id)}
+            onDownloadOriginal={onDownloadOriginal ? () => onDownloadOriginal(row.invoice.id) : undefined}
             busy={busy}
           />
         ))}
@@ -234,6 +238,7 @@ const InvoiceTableRow = memo(function InvoiceTableRow({
   onAddPages,
   onRetry,
   onDelete,
+  onDownloadOriginal,
   busy,
 }: {
   row: Analyzed;
@@ -243,6 +248,7 @@ const InvoiceTableRow = memo(function InvoiceTableRow({
   onAddPages: (id: string) => void;
   onRetry?: (id: string) => void;
   onDelete: (id: string) => void;
+  onDownloadOriginal?: (id: string) => void;
   busy?: boolean;
 }) {
   const { invoice, issues, lineCount } = row;
@@ -310,6 +316,17 @@ const InvoiceTableRow = memo(function InvoiceTableRow({
               Retry
             </Button>
           ) : null}
+          {invoice.originalFileCount && onDownloadOriginal ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-9"
+              onClick={() => onDownloadOriginal(invoice.id)}
+              aria-label="Download original file"
+            >
+              <Download className="size-4" />
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
             size="icon"
@@ -352,6 +369,7 @@ const InvoiceCard = memo(function InvoiceCard({
   onAddPages,
   onRetry,
   onDelete,
+  onDownloadOriginal,
   busy,
 }: {
   row: Analyzed;
@@ -361,6 +379,7 @@ const InvoiceCard = memo(function InvoiceCard({
   onAddPages: () => void;
   onRetry?: (id: string) => void;
   onDelete: () => void;
+  onDownloadOriginal?: () => void;
   busy?: boolean;
 }) {
   const { invoice, issues, lineCount } = row;
@@ -464,6 +483,12 @@ const InvoiceCard = memo(function InvoiceCard({
           <ImagePlus className="size-4" />
           Pages
         </Button>
+        {invoice.originalFileCount && onDownloadOriginal ? (
+          <Button variant="outline" onClick={onDownloadOriginal}>
+            <Download className="size-4" />
+            Original
+          </Button>
+        ) : null}
         <Button variant="ghost" className="text-destructive" onClick={onDelete}>
           <Trash2 className="size-4" />
           Delete

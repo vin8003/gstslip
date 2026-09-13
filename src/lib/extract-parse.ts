@@ -112,6 +112,7 @@ export function extractHasSignal(result: ExtractResult): boolean {
       fields.supplier_name ||
       fields.total_invoice_value ||
       fields.taxable_value ||
+      fields.net_payable ||
       fields.irn,
   );
 }

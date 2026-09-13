@@ -6,25 +6,46 @@ export const INVOICE_FIELDS = [
   "invoice_date",
   "supplier_name",
   "supplier_gstin",
+  "supplier_pan",
   "supplier_address",
   "supplier_place",
   "supplier_pincode",
   "buyer_name",
   "buyer_gstin",
+  "buyer_pan",
+  "buyer_mobile",
   "buyer_address",
   "buyer_place",
   "buyer_pincode",
+  "consignee_name",
+  "salesman",
+  "route_name",
   "hsn_sac",
   "taxable_value",
   "cgst",
   "sgst",
   "igst",
+  "gross_amount",
+  "scheme_amount",
+  "discount_amount",
+  "tcs",
+  "crn_amount",
+  "round_off",
   "total_invoice_value",
+  "net_payable",
   "place_of_supply",
+  "remarks",
   "irn",
   "ack_no",
   "ack_date",
   "signed_qr",
+  "eway_bill_no",
+  "eway_bill_date",
+  "transporter_name",
+  "transporter_id",
+  "vehicle_no",
+  "lr_number",
+  "mode_of_transport",
 ] as const;
 
 export type InvoiceField = (typeof INVOICE_FIELDS)[number];
@@ -48,6 +69,8 @@ export type GstInvoice = {
   filledFromDefaults?: InvoiceField[];
   lineItems: LineItem[];
   pageCount?: number;
+  /** Count of original uploaded files stored for download. */
+  originalFileCount?: number;
   /** True while a manual row has not yet used a free capture. */
   pendingQuota?: boolean;
   analysis?: InvoiceAnalysis;
@@ -62,7 +85,15 @@ export const LINE_ITEM_FIELDS = [
   "hsn_sac",
   "quantity",
   "unit",
+  "mrp",
+  "cases",
+  "pieces",
+  "free_qty",
   "rate",
+  "gst_rate",
+  "scheme_percent",
+  "discount_percent",
+  "gross_amount",
   "taxable_value",
   "cgst",
   "sgst",
@@ -81,7 +112,15 @@ export const LINE_ITEM_LABELS: Record<LineItemField, string> = {
   hsn_sac: "HSN / SAC",
   quantity: "Qty",
   unit: "Unit",
+  mrp: "MRP",
+  cases: "Cases",
+  pieces: "Pcs",
+  free_qty: "Free",
   rate: "Rate",
+  gst_rate: "GST %",
+  scheme_percent: "Scheme %",
+  discount_percent: "Disc. %",
+  gross_amount: "Gross",
   taxable_value: "Taxable",
   cgst: "CGST",
   sgst: "SGST",
@@ -91,7 +130,15 @@ export const LINE_ITEM_LABELS: Record<LineItemField, string> = {
 
 export const LINE_AMOUNT_FIELDS: LineItemField[] = [
   "quantity",
+  "mrp",
+  "cases",
+  "pieces",
+  "free_qty",
   "rate",
+  "gst_rate",
+  "scheme_percent",
+  "discount_percent",
+  "gross_amount",
   "taxable_value",
   "cgst",
   "sgst",
@@ -99,12 +146,41 @@ export const LINE_AMOUNT_FIELDS: LineItemField[] = [
   "line_total",
 ];
 
+export const LINE_MONEY_FIELDS: LineItemField[] = [
+  "mrp",
+  "rate",
+  "gross_amount",
+  "taxable_value",
+  "cgst",
+  "sgst",
+  "igst",
+  "line_total",
+];
+
+export const LINE_QTY_FIELDS: LineItemField[] = [
+  "quantity",
+  "cases",
+  "pieces",
+  "free_qty",
+  "gst_rate",
+  "scheme_percent",
+  "discount_percent",
+];
+
 export const EMPTY_LINE_ITEM: Omit<LineItem, "id"> = {
   description: "",
   hsn_sac: "",
   quantity: "",
   unit: "",
+  mrp: "",
+  cases: "",
+  pieces: "",
+  free_qty: "",
   rate: "",
+  gst_rate: "",
+  scheme_percent: "",
+  discount_percent: "",
+  gross_amount: "",
   taxable_value: "",
   cgst: "",
   sgst: "",
@@ -117,25 +193,46 @@ export const FIELD_LABELS: Record<InvoiceField, string> = {
   invoice_date: "Invoice date",
   supplier_name: "Supplier name",
   supplier_gstin: "Supplier GSTIN",
+  supplier_pan: "Supplier PAN",
   supplier_address: "Supplier address",
   supplier_place: "Supplier place",
   supplier_pincode: "Supplier PIN",
   buyer_name: "Buyer name",
   buyer_gstin: "Buyer GSTIN",
+  buyer_pan: "Buyer PAN",
+  buyer_mobile: "Buyer mobile",
   buyer_address: "Buyer address",
   buyer_place: "Buyer place",
   buyer_pincode: "Buyer PIN",
+  consignee_name: "Consignee / ship to",
+  salesman: "Salesman",
+  route_name: "Route",
   hsn_sac: "HSN / SAC",
   taxable_value: "Taxable value",
   cgst: "CGST",
   sgst: "SGST",
   igst: "IGST",
+  gross_amount: "Gross amount",
+  scheme_amount: "Scheme amount",
+  discount_amount: "Cash discount",
+  tcs: "TCS",
+  crn_amount: "Credit note applied",
+  round_off: "Round off",
   total_invoice_value: "Total invoice value",
+  net_payable: "Net payable",
   place_of_supply: "Place of supply",
+  remarks: "Remarks",
   irn: "IRN",
   ack_no: "Ack. number",
   ack_date: "Ack. date",
   signed_qr: "Signed QR",
+  eway_bill_no: "e-Way Bill number",
+  eway_bill_date: "e-Way Bill date",
+  transporter_name: "Transporter name",
+  transporter_id: "Transporter ID",
+  vehicle_no: "Vehicle number",
+  lr_number: "LR / consignment note",
+  mode_of_transport: "Mode of transport",
 };
 
 export const FIELD_HINTS: Record<InvoiceField, string> = {
@@ -143,25 +240,46 @@ export const FIELD_HINTS: Record<InvoiceField, string> = {
   invoice_date: "DD/MM/YYYY or YYYY-MM-DD",
   supplier_name: "Registered name of the supplier",
   supplier_gstin: "15-character GSTIN",
+  supplier_pan: "10-character PAN",
   supplier_address: "Street address from the tax invoice",
   supplier_place: "City or locality",
   supplier_pincode: "6-digit PIN code",
   buyer_name: "Registered name of the recipient",
   buyer_gstin: "15-character GSTIN, if B2B",
+  buyer_pan: "10-character PAN",
+  buyer_mobile: "10-digit mobile, if printed",
   buyer_address: "Street address of the recipient",
   buyer_place: "City or locality",
   buyer_pincode: "6-digit PIN code",
+  consignee_name: "Ship-to name if different from buyer",
+  salesman: "SM / sales executive name",
+  route_name: "Beat or route name",
   hsn_sac: "Comma-separated HSN or SAC codes",
   taxable_value: "Sum of taxable amounts, INR",
   cgst: "Central GST, INR",
   sgst: "State GST, INR",
   igst: "Integrated GST, INR",
+  gross_amount: "Gross before scheme or discount, INR",
+  scheme_amount: "Scheme / GST-benefit discount, INR",
+  discount_amount: "Cash discount, INR",
+  tcs: "Tax collected at source, INR",
+  crn_amount: "Credit note adjusted on this invoice, INR",
+  round_off: "Rounding, INR — may be negative",
   total_invoice_value: "Grand total including tax",
-  place_of_supply: "State name and code, e.g. Maharashtra (27)",
+  net_payable: "Net receivable / payable after scheme",
+  place_of_supply: "State name and code, e.g. Rajasthan (08)",
+  remarks: "CND, NON CND, or other printed remarks",
   irn: "64-character Invoice Reference Number",
   ack_no: "IRP acknowledgement number",
   ack_date: "YYYY-MM-DD HH:MM:SS",
   signed_qr: "Signed QR JWT from the IRP, if printed",
+  eway_bill_no: "12-digit e-Way Bill, if printed",
+  eway_bill_date: "YYYY-MM-DD, if printed",
+  transporter_name: "Transporter name from the invoice",
+  transporter_id: "Transporter GSTIN / ID, if printed",
+  vehicle_no: "Vehicle number, if printed",
+  lr_number: "Lorry receipt or consignment note",
+  mode_of_transport: "Road, Rail, Air, or Ship — only if printed",
 };
 
 export const AMOUNT_FIELDS: InvoiceField[] = [
@@ -169,16 +287,25 @@ export const AMOUNT_FIELDS: InvoiceField[] = [
   "cgst",
   "sgst",
   "igst",
+  "gross_amount",
+  "scheme_amount",
+  "discount_amount",
+  "tcs",
+  "crn_amount",
+  "round_off",
   "total_invoice_value",
+  "net_payable",
 ];
 
 export const GSTIN_FIELDS: InvoiceField[] = ["supplier_gstin", "buyer_gstin"];
+export const PAN_FIELDS: InvoiceField[] = ["supplier_pan", "buyer_pan"];
 
 export const PINCODE_FIELDS: InvoiceField[] = ["supplier_pincode", "buyer_pincode"];
 
 export const TEXTAREA_FIELDS: InvoiceField[] = [
   "supplier_address",
   "buyer_address",
+  "remarks",
   "signed_qr",
 ];
 
@@ -197,6 +324,7 @@ export const REGISTER_FIELDS: InvoiceField[] = [
   "sgst",
   "igst",
   "total_invoice_value",
+  "net_payable",
   "place_of_supply",
 ];
 
@@ -207,6 +335,7 @@ export const CARD_FIELDS: InvoiceField[] = [
   "buyer_gstin",
   "taxable_value",
   "total_invoice_value",
+  "net_payable",
   "place_of_supply",
 ];
 
@@ -215,48 +344,96 @@ export const EMPTY_FIELDS: InvoiceFields = {
   invoice_date: "",
   supplier_name: "",
   supplier_gstin: "",
+  supplier_pan: "",
   supplier_address: "",
   supplier_place: "",
   supplier_pincode: "",
   buyer_name: "",
   buyer_gstin: "",
+  buyer_pan: "",
+  buyer_mobile: "",
   buyer_address: "",
   buyer_place: "",
   buyer_pincode: "",
+  consignee_name: "",
+  salesman: "",
+  route_name: "",
   hsn_sac: "",
   taxable_value: "",
   cgst: "",
   sgst: "",
   igst: "",
+  gross_amount: "",
+  scheme_amount: "",
+  discount_amount: "",
+  tcs: "",
+  crn_amount: "",
+  round_off: "",
   total_invoice_value: "",
+  net_payable: "",
   place_of_supply: "",
+  remarks: "",
   irn: "",
   ack_no: "",
   ack_date: "",
   signed_qr: "",
+  eway_bill_no: "",
+  eway_bill_date: "",
+  transporter_name: "",
+  transporter_id: "",
+  vehicle_no: "",
+  lr_number: "",
+  mode_of_transport: "",
 };
 
 export const FIELD_GROUPS: Array<{ title: string; fields: InvoiceField[] }> = [
-  { title: "Invoice", fields: ["invoice_number", "invoice_date"] },
+  { title: "Invoice", fields: ["invoice_number", "invoice_date", "salesman", "route_name"] },
   {
     title: "Supplier",
-    fields: ["supplier_name", "supplier_gstin", "supplier_address", "supplier_place", "supplier_pincode"],
+    fields: ["supplier_name", "supplier_gstin", "supplier_pan", "supplier_address", "supplier_place", "supplier_pincode"],
   },
   {
     title: "Buyer",
-    fields: ["buyer_name", "buyer_gstin", "buyer_address", "buyer_place", "buyer_pincode"],
+    fields: [
+      "buyer_name",
+      "buyer_gstin",
+      "buyer_pan",
+      "buyer_mobile",
+      "buyer_address",
+      "buyer_place",
+      "buyer_pincode",
+      "consignee_name",
+    ],
   },
   {
     title: "Tax heads",
     fields: ["hsn_sac", "taxable_value", "cgst", "sgst", "igst", "total_invoice_value"],
   },
-  { title: "Supply", fields: ["place_of_supply"] },
+  {
+    title: "Adjustments",
+    fields: ["gross_amount", "scheme_amount", "discount_amount", "tcs", "crn_amount", "round_off", "net_payable"],
+  },
+  { title: "Supply", fields: ["place_of_supply", "remarks"] },
+  {
+    title: "Transport",
+    fields: [
+      "eway_bill_no",
+      "eway_bill_date",
+      "transporter_name",
+      "transporter_id",
+      "vehicle_no",
+      "lr_number",
+      "mode_of_transport",
+    ],
+  },
   { title: "e-Invoice", fields: ["irn", "ack_no", "ack_date", "signed_qr"] },
 ];
 
 export const DEFAULT_FIELD_GROUPS = FIELD_GROUPS.filter((group) => group.title !== "e-Invoice");
 
 export const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+export const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+export const MOBILE_RE = /^[0-9]{10}$/;
 export const PINCODE_RE = /^[1-9][0-9]{5}$/;
 export const IRN_RE = /^[a-fA-F0-9]{64}$/;
 
@@ -342,8 +519,24 @@ export function formatAmountInput(value: string | number | null | undefined): st
   return n.toFixed(2);
 }
 
+export function formatQtyInput(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "";
+  const n = typeof value === "number" ? value : parseAmount(String(value));
+  if (n === null) return String(value).trim();
+  if (Number.isInteger(n)) return String(n);
+  return String(n);
+}
+
 export function normalizeGstin(value: string): string {
   return value.replace(/\s+/g, "").toUpperCase();
+}
+
+export function normalizePan(value: string): string {
+  return value.replace(/\s+/g, "").toUpperCase();
+}
+
+export function normalizeMobile(value: string): string {
+  return value.replace(/[^\d]/g, "").slice(-10);
 }
 
 export function normalizeDate(value: string): string {
@@ -397,6 +590,15 @@ export function validateInvoice(fields: InvoiceFields, lineItems: LineItem[] = [
     if (raw.length !== 15) issues.push({ field: key, message: "Must be 15 characters" });
     else if (!GSTIN_RE.test(raw)) issues.push({ field: key, message: "Invalid GSTIN format" });
   }
+  for (const key of PAN_FIELDS) {
+    const raw = normalizePan(fields[key]);
+    if (!raw) continue;
+    if (!PAN_RE.test(raw)) issues.push({ field: key, message: "PAN is 10 characters" });
+  }
+  const mobile = normalizeMobile(fields.buyer_mobile);
+  if (fields.buyer_mobile.trim() && !MOBILE_RE.test(mobile)) {
+    issues.push({ field: "buyer_mobile", message: "Use a 10-digit mobile" });
+  }
   for (const key of PINCODE_FIELDS) {
     const raw = fields[key].trim();
     if (raw && !PINCODE_RE.test(raw)) issues.push({ field: key, message: "Use a 6-digit PIN" });
@@ -413,22 +615,35 @@ export function validateInvoice(fields: InvoiceFields, lineItems: LineItem[] = [
     }
     const n = parseAmount(raw);
     if (n === null) issues.push({ field: key, message: "Enter a number" });
-    else if (n < 0) issues.push({ field: key, message: "Cannot be negative" });
+    else if (n < 0 && key !== "round_off") issues.push({ field: key, message: "Cannot be negative" });
   }
   const taxable = parseAmount(fields.taxable_value) ?? 0;
   const cgst = parseAmount(fields.cgst) ?? 0;
   const sgst = parseAmount(fields.sgst) ?? 0;
   const igst = parseAmount(fields.igst) ?? 0;
+  const tcs = parseAmount(fields.tcs) ?? 0;
+  const roundOff = parseAmount(fields.round_off) ?? 0;
+  const scheme = parseAmount(fields.scheme_amount) ?? 0;
+  const cashDisc = parseAmount(fields.discount_amount) ?? 0;
+  const crn = parseAmount(fields.crn_amount) ?? 0;
   const total = parseAmount(fields.total_invoice_value);
+  const net = parseAmount(fields.net_payable);
   if (cgst > 0 && sgst === 0) issues.push({ field: "sgst", message: "CGST usually pairs with SGST" });
   if (sgst > 0 && cgst === 0) issues.push({ field: "cgst", message: "SGST usually pairs with CGST" });
   if (igst > 0 && (cgst > 0 || sgst > 0)) {
     issues.push({ field: "igst", message: "IGST should not mix with CGST/SGST" });
   }
-  if (total !== null) {
-    const reconstructed = taxable + cgst + sgst + igst;
-    if (Math.abs(reconstructed - total) > 2) {
-      issues.push({ field: "total_invoice_value", message: `Tax heads sum to ${formatInr(reconstructed)}` });
+  if (total !== null || net !== null) {
+    const reconstructed = taxable + cgst + sgst + igst + tcs + roundOff;
+    const compareTo = net ?? total;
+    if (compareTo !== null && Math.abs(reconstructed - compareTo) > 2) {
+      const afterScheme = reconstructed - scheme - cashDisc - crn;
+      if (Math.abs(afterScheme - compareTo) > 2 && Math.abs(reconstructed - (total ?? compareTo)) > 2) {
+        issues.push({
+          field: net !== null ? "net_payable" : "total_invoice_value",
+          message: `Tax heads sum to ${formatInr(reconstructed)}`,
+        });
+      }
     }
   }
   const supplierState = normalizeGstin(fields.supplier_gstin).slice(0, 2);
@@ -480,6 +695,8 @@ export function fieldsFromExtract(
     if (typeof value === "string" && !value.trim()) continue;
     if (AMOUNT_FIELDS.includes(key)) next[key] = formatAmountInput(value);
     else if (GSTIN_FIELDS.includes(key)) next[key] = normalizeGstin(String(value));
+    else if (PAN_FIELDS.includes(key)) next[key] = normalizePan(String(value));
+    else if (key === "buyer_mobile") next[key] = normalizeMobile(String(value));
     else if (key === "invoice_date") next[key] = normalizeDate(String(value));
     else next[key] = String(value).trim();
   }
@@ -535,6 +752,8 @@ export function applyFieldDefaults(
     if (IRN_META_FIELDS.includes(key)) continue;
     if (AMOUNT_FIELDS.includes(key)) next[key] = formatAmountInput(defaults[key]);
     else if (GSTIN_FIELDS.includes(key)) next[key] = normalizeGstin(defaults[key]);
+    else if (PAN_FIELDS.includes(key)) next[key] = normalizePan(defaults[key]);
+    else if (key === "buyer_mobile") next[key] = normalizeMobile(defaults[key]);
     else if (key === "invoice_date") next[key] = normalizeDate(defaults[key]);
     else next[key] = defaults[key].trim();
     applied.push(key);
@@ -569,7 +788,8 @@ export function lineItemsFromExtract(
       const value = row[key];
       if (value === null || value === undefined) continue;
       if (typeof value === "string" && !value.trim()) continue;
-      if (LINE_AMOUNT_FIELDS.includes(key)) next[key] = formatAmountInput(value);
+      if (LINE_MONEY_FIELDS.includes(key)) next[key] = formatAmountInput(value);
+      else if (LINE_QTY_FIELDS.includes(key)) next[key] = formatQtyInput(value);
       else next[key] = String(value).trim();
     }
     if (!isBlankLineItem(next)) items.push(next);
@@ -584,7 +804,9 @@ export function coerceLineItem(value: unknown): LineItem {
   for (const key of LINE_ITEM_FIELDS) {
     const item = raw[key];
     if (typeof item === "string") next[key] = item;
-    else if (typeof item === "number" && Number.isFinite(item)) next[key] = formatAmountInput(item);
+    else if (typeof item === "number" && Number.isFinite(item)) {
+      next[key] = LINE_MONEY_FIELDS.includes(key) ? formatAmountInput(item) : formatQtyInput(item);
+    }
   }
   return next;
 }
@@ -612,6 +834,10 @@ export function coerceInvoice(value: unknown): GstInvoice | null {
     filledFromDefaults: filled.length ? filled : undefined,
     lineItems: coerceLineItems(raw.lineItems),
     pageCount: typeof raw.pageCount === "number" && raw.pageCount > 0 ? raw.pageCount : undefined,
+    originalFileCount:
+      typeof raw.originalFileCount === "number" && raw.originalFileCount > 0
+        ? Math.floor(raw.originalFileCount)
+        : undefined,
     pendingQuota: raw.pendingQuota === true ? true : undefined,
     analysis: coerceAnalysis(raw.analysis),
   };
@@ -667,6 +893,7 @@ export function applyLineTotalsToFields(fields: InvoiceFields, items: LineItem[]
   const sgst = sumLineField(lines, "sgst");
   const igst = sumLineField(lines, "igst");
   const lineTotal = sumLineField(lines, "line_total");
+  const gross = sumLineField(lines, "gross_amount");
   const hsns = uniqueLineHsns(lines);
   return {
     ...fields,
@@ -675,7 +902,9 @@ export function applyLineTotalsToFields(fields: InvoiceFields, items: LineItem[]
     cgst: formatAmountInput(cgst),
     sgst: formatAmountInput(sgst),
     igst: formatAmountInput(igst),
+    gross_amount: gross ? formatAmountInput(gross) : fields.gross_amount,
     total_invoice_value: formatAmountInput(lineTotal || taxable + cgst + sgst + igst),
+    net_payable: formatAmountInput(lineTotal || taxable + cgst + sgst + igst),
   };
 }
 
@@ -694,6 +923,10 @@ export function fillMissingHeaderFromLines(fields: InvoiceFields, items: LineIte
   for (const [header, line] of mapped) {
     if (isMissingValue(next[header])) next[header] = formatAmountInput(sumLineField(lines, line));
   }
+  if (isMissingValue(next.gross_amount)) {
+    const gross = sumLineField(lines, "gross_amount");
+    if (gross) next.gross_amount = formatAmountInput(gross);
+  }
   if (isMissingValue(next.total_invoice_value)) {
     const lineTotal = sumLineField(lines, "line_total");
     const reconstructed =
@@ -702,6 +935,9 @@ export function fillMissingHeaderFromLines(fields: InvoiceFields, items: LineIte
       (parseAmount(next.sgst) ?? 0) +
       (parseAmount(next.igst) ?? 0);
     next.total_invoice_value = formatAmountInput(lineTotal || reconstructed);
+  }
+  if (isMissingValue(next.net_payable) && !isMissingValue(next.total_invoice_value)) {
+    next.net_payable = next.total_invoice_value;
   }
   return next;
 }

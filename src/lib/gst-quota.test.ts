@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   EMPTY_FIELDS,
+  EMPTY_LINE_ITEM,
   hasMeaningfulInvoiceData,
   type InvoiceFields,
   type LineItem,
@@ -41,15 +42,13 @@ test("user-edited field besides defaults is meaningful", () => {
 test("a real line item is meaningful", () => {
   const item = {
     id: "line-1",
+    ...EMPTY_LINE_ITEM,
     description: "Cotton",
     hsn_sac: "5208",
     quantity: "1",
     unit: "MTR",
     rate: "10",
     taxable_value: "10",
-    cgst: "",
-    sgst: "",
-    igst: "",
     line_total: "10",
   } satisfies LineItem;
   assert.equal(hasMeaningfulInvoiceData(EMPTY_FIELDS, [item]), true);
@@ -58,16 +57,7 @@ test("a real line item is meaningful", () => {
 test("blank line items are ignored", () => {
   const item = {
     id: "line-1",
-    description: "",
-    hsn_sac: "",
-    quantity: "",
-    unit: "",
-    rate: "",
-    taxable_value: "",
-    cgst: "",
-    sgst: "",
-    igst: "",
-    line_total: "",
+    ...EMPTY_LINE_ITEM,
   } satisfies LineItem;
   assert.equal(hasMeaningfulInvoiceData(EMPTY_FIELDS, [item]), false);
 });

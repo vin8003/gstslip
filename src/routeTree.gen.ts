@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as HistoryRouteImport } from './routes/history'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as ApiCreateOrderRouteImport } from './routes/api/create-order'
@@ -28,6 +29,11 @@ const IndexRoute = IndexRouteImport.update({
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HistoryRoute = HistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -74,6 +80,7 @@ const ApiBillingRazorpayRoute = ApiBillingRazorpayRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
   '/api/create-order': typeof ApiCreateOrderRoute
@@ -86,6 +93,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
   '/api/create-order': typeof ApiCreateOrderRoute
@@ -99,6 +107,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
   '/api/create-order': typeof ApiCreateOrderRoute
@@ -113,6 +122,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/history'
     | '/login'
     | '/profile'
     | '/api/create-order'
@@ -125,6 +135,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin'
+    | '/history'
     | '/login'
     | '/profile'
     | '/api/create-order'
@@ -137,6 +148,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/admin'
+    | '/history'
     | '/login'
     | '/profile'
     | '/api/create-order'
@@ -150,6 +162,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  HistoryRoute: typeof HistoryRoute
   LoginRoute: typeof LoginRoute
   ProfileRoute: typeof ProfileRoute
   ApiCreateOrderRoute: typeof ApiCreateOrderRoute
@@ -174,6 +187,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/history': {
+      id: '/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof HistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -238,6 +258,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  HistoryRoute: HistoryRoute,
   LoginRoute: LoginRoute,
   ProfileRoute: ProfileRoute,
   ApiCreateOrderRoute: ApiCreateOrderRoute,

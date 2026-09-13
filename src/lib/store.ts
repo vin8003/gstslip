@@ -3,7 +3,6 @@ import { create } from "zustand";
 import { persist, type PersistStorage } from "zustand/middleware";
 import {
   EMPTY_FIELDS,
-  canCapture,
   coerceFields,
   coerceInvoice,
   hasMeaningfulInvoiceData,
@@ -22,6 +21,7 @@ type GstState = {
   isPro: boolean;
   defaults: InvoiceFields;
   addInvoice: (invoice: GstInvoice, consume?: boolean) => boolean;
+  mergeInvoice: (invoice: GstInvoice) => void;
   updateInvoice: (
     id: string,
     patch: {
@@ -32,11 +32,13 @@ type GstState = {
       pageCount?: number;
       sourceName?: string;
       analysis?: InvoiceAnalysis | null;
+      originalFileCount?: number;
     },
   ) => boolean;
   removeInvoice: (id: string) => void;
   unlockPro: () => void;
   setPro: (isPro: boolean) => void;
+  setCapturesUsed: (used: number) => void;
   setDefaults: (defaults: InvoiceFields) => void;
 };
 
@@ -166,19 +168,26 @@ export const useGstStore = create<GstState>()(
       isPro: false,
       defaults: { ...EMPTY_FIELDS },
       addInvoice: (invoice, consume = true) => {
-        const { capturesUsed, isPro, invoices } = get();
-        if (consume && !canCapture(capturesUsed, isPro)) return false;
+        const { invoices } = get();
         const row: GstInvoice = consume
           ? { ...invoice, pendingQuota: undefined }
           : { ...invoice, pendingQuota: true };
-        set({
-          invoices: [row, ...invoices],
-          capturesUsed: consume ? capturesUsed + 1 : capturesUsed,
-        });
+        set({ invoices: [row, ...invoices] });
         return true;
       },
+      mergeInvoice: (invoice) => {
+        const { invoices } = get();
+        const index = invoices.findIndex((row) => row.id === invoice.id);
+        if (index < 0) {
+          set({ invoices: [invoice, ...invoices] });
+          return;
+        }
+        const next = invoices.slice();
+        next[index] = { ...invoices[index], ...invoice };
+        set({ invoices: next });
+      },
       updateInvoice: (id, patch) => {
-        const { invoices, capturesUsed, isPro } = get();
+        const { invoices } = get();
         const index = invoices.findIndex((row) => row.id === id);
         if (index < 0) return false;
         const invoice = invoices[index];
@@ -191,10 +200,7 @@ export const useGstStore = create<GstState>()(
               : undefined
             : invoice.filledFromDefaults;
         let pendingQuota = invoice.pendingQuota === true;
-        let nextUsed = capturesUsed;
         if (pendingQuota && hasMeaningfulInvoiceData(fields, lineItems, filled)) {
-          if (!canCapture(capturesUsed, isPro)) return false;
-          nextUsed = capturesUsed + 1;
           pendingQuota = false;
         }
         const next = invoices.slice();
@@ -206,6 +212,7 @@ export const useGstStore = create<GstState>()(
           notes: patch.notes !== undefined ? patch.notes || undefined : invoice.notes,
           pageCount: patch.pageCount ?? invoice.pageCount,
           sourceName: patch.sourceName ?? invoice.sourceName,
+          originalFileCount: patch.originalFileCount ?? invoice.originalFileCount,
           pendingQuota: pendingQuota || undefined,
           analysis:
             patch.analysis === null
@@ -214,21 +221,17 @@ export const useGstStore = create<GstState>()(
                 ? patch.analysis
                 : invoice.analysis,
         };
-        set({ capturesUsed: nextUsed, invoices: next });
+        set({ invoices: next });
         return true;
       },
       removeInvoice: (id) => {
-        const { invoices, capturesUsed } = get();
-        const invoice = invoices.find((row) => row.id === id);
-        if (!invoice) return;
-        const restore = invoice.pendingQuota !== true && capturesUsed > 0;
-        set({
-          invoices: invoices.filter((row) => row.id !== id),
-          capturesUsed: restore ? capturesUsed - 1 : capturesUsed,
-        });
+        const { invoices } = get();
+        set({ invoices: invoices.filter((row) => row.id !== id) });
       },
       unlockPro: () => set({ isPro: true }),
       setPro: (isPro) => set({ isPro: Boolean(isPro) }),
+      setCapturesUsed: (used) =>
+        set({ capturesUsed: typeof used === "number" && used > 0 ? Math.floor(used) : 0 }),
       setDefaults: (defaults) => set({ defaults: coerceFields(defaults) }),
     }),
     {

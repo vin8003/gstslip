@@ -27,11 +27,11 @@ export type ExtractInput = {
 const FAST_MODEL = "grok-4-fast";
 const FALLBACK_MODEL = "grok-4.5";
 const CALL_TIMEOUT_MS = 40_000;
-const MAX_TOKENS = 2800;
+const MAX_TOKENS = 4000;
 
 const SYSTEM_PROMPT = `Extract India GST tax invoice JSON from THIS page only.
-Keys: is_invoice, notes, invoice_number, invoice_date, supplier_name, supplier_gstin, supplier_address, supplier_place, supplier_pincode, buyer_name, buyer_gstin, buyer_address, buyer_place, buyer_pincode, hsn_sac, taxable_value, cgst, sgst, igst, total_invoice_value, place_of_supply, irn, ack_no, ack_date, signed_qr, line_items[{description,hsn_sac,quantity,unit,rate,taxable_value,cgst,sgst,igst,line_total}].
-Unreadable text "". Unreadable amounts null. Never invent GSTIN, IRN, names, or amounts. Dates YYYY-MM-DD. Amounts as numbers. line_items = billed rows on this page only; skip totals/tax-summary rows. Return a single JSON object.`;
+Keys: is_invoice, notes, invoice_number, invoice_date, supplier_name, supplier_gstin, supplier_pan, supplier_address, supplier_place, supplier_pincode, buyer_name, buyer_gstin, buyer_pan, buyer_mobile, buyer_address, buyer_place, buyer_pincode, consignee_name, salesman, route_name, hsn_sac, taxable_value, cgst, sgst, igst, gross_amount, scheme_amount, discount_amount, tcs, crn_amount, round_off, total_invoice_value, net_payable, place_of_supply, remarks, irn, ack_no, ack_date, signed_qr, eway_bill_no, eway_bill_date, transporter_name, transporter_id, vehicle_no, lr_number, mode_of_transport, line_items[{description,hsn_sac,quantity,unit,mrp,cases,pieces,free_qty,rate,gst_rate,scheme_percent,discount_percent,gross_amount,taxable_value,cgst,sgst,igst,line_total}].
+Distributor / stockist invoices: C/S=cases, Pcs=pieces, Fr=free_qty, Gr.Amt=gross_amount, Scheme%=scheme_percent, C.Disc%=discount_percent, Taxable Amt=taxable_value, Net Amt=line_total, GST %=gst_rate (0, 5, 12, 18, 28). Net payable / Net receivable = net_payable. Total Invoice Value may be gross before scheme. round_off may be negative. PAN is 10 chars. Buyer Mob is 10 digits. Consignee is Ship to. e-Way Bill No / Date, transporter, vehicle, LR, and mode of transport only if printed. Unreadable text "". Unreadable amounts null. Never invent GSTIN, IRN, e-Way Bill, names, or amounts. Dates YYYY-MM-DD. Amounts as numbers. line_items = billed rows on this page only; skip totals/tax-summary rows. Return a single JSON object.`;
 
 function pageMessages(
   pages: Array<{ mime: string; raw: string }>,

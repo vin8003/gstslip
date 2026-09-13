@@ -84,6 +84,10 @@ function flushPatch(): void {
     ...next.extra,
     analysis: next.analysis,
   });
+  const row = currentInvoice(next.id);
+  if (row) {
+    void import("./invoices/client").then((mod) => mod.persistStoredInvoice(row));
+  }
 }
 
 function patchInvoice(
@@ -99,6 +103,11 @@ function patchInvoice(
   }
   if (patchTimer) return;
   patchTimer = setTimeout(flushPatch, 90);
+}
+
+export function isAnalysisLive(id: string): boolean {
+  const job = jobs.get(id);
+  return Boolean(job && !job.aborted);
 }
 
 export function canRetryAnalysis(id: string): boolean {

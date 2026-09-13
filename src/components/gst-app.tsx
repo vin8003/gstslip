@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LoaderCircle, SlidersHorizontal } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { History, LoaderCircle, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { AccountBar } from "@/components/account-bar";
 import { CapturePanel } from "@/components/capture-panel";
@@ -48,6 +49,15 @@ import { hydrateGstStore, useGstStore, useGstStoreRestore } from "@/lib/store";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { consumePaywallReturn, consumeUpgradeQuery } from "@/lib/billing/paywall-return";
 import { getEntitlement, isUnauthorized } from "@/lib/billing/store";
+import { refreshQuota, takeCaptureSlot, type ConsumeResult } from "@/lib/quota/client";
+import {
+  downloadOriginalFiles,
+  mergeStoredIntoRegister,
+  persistStoredInvoiceNow,
+  pullStoredInvoices,
+  rememberOriginalFiles,
+  removeStoredInvoice,
+} from "@/lib/invoices/client";
 
 const InvoiceEditor = lazy(() =>
   import("@/components/invoice-editor").then((m) => ({ default: m.InvoiceEditor })),
@@ -60,6 +70,9 @@ const DefaultsDialog = lazy(() =>
 );
 const Paywall = lazy(() =>
   import("@/components/paywall").then((m) => ({ default: m.Paywall })),
+);
+const VerifyEmailDialog = lazy(() =>
+  import("@/components/verify-email-dialog").then((m) => ({ default: m.VerifyEmailDialog })),
 );
 
 type CaptureUi =
@@ -110,6 +123,8 @@ export function GstApp() {
 
   const [capture, setCapture] = useState<CaptureUi>({ phase: "idle" });
   const [paywallOpen, setPaywallOpen] = useState(false);
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
   const [defaultsOpen, setDefaultsOpen] = useState(false);
   const [irnOpen, setIrnOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -125,6 +140,16 @@ export function GstApp() {
   useEffect(() => {
     if (consumePaywallReturn() || consumeUpgradeQuery()) setPaywallOpen(true);
   }, []);
+
+  useEffect(() => {
+    if (userPending) return;
+    refreshQuota()
+      .then((status) => setNeedsVerification(status.needsVerification))
+      .catch(() => {
+        /* keep the on-device count until the next successful sync */
+      });
+    void pullStoredInvoices().then(mergeStoredIntoRegister);
+  }, [user, userPending]);
 
   useEffect(() => {
     if (userPending || !user || user.isDevFallback) return;
@@ -171,23 +196,40 @@ export function GstApp() {
     }
   }, [capture.phase]);
 
-  const insertInvoice = useCallback((invoice: GstInvoice, openEditor: boolean, consume = true) => {
-    hydrateGstStore();
-    const store = useGstStore.getState();
-    if (consume && !canCapture(store.capturesUsed, store.isPro)) {
-      setPaywallOpen(true);
-      return false;
-    }
-    if (!store.addInvoice(invoice, consume)) {
-      setPaywallOpen(true);
-      return false;
-    }
-    if (openEditor) {
-      void import("@/components/invoice-editor");
-      setEditingId(invoice.id);
-    }
-    return true;
+  const rejectQuota = useCallback((result: ConsumeResult) => {
+    setNeedsVerification(result.needsVerification);
+    if (result.reason === "unverified") setVerifyOpen(true);
+    else setPaywallOpen(true);
   }, []);
+
+  const insertInvoice = useCallback(
+    async (invoice: GstInvoice, openEditor: boolean, consume = true) => {
+      hydrateGstStore();
+      const store = useGstStore.getState();
+      if (consume) {
+        const result = await takeCaptureSlot();
+        if (!result.ok) {
+          rejectQuota(result);
+          return false;
+        }
+        setNeedsVerification(result.needsVerification);
+      } else if (!store.isPro && !canCapture(store.capturesUsed, false)) {
+        setPaywallOpen(true);
+        return false;
+      }
+      if (!useGstStore.getState().addInvoice(invoice, consume)) {
+        setPaywallOpen(true);
+        return false;
+      }
+      persistStoredInvoiceNow(useGstStore.getState().invoices.find((row) => row.id === invoice.id) ?? invoice);
+      if (openEditor) {
+        void import("@/components/invoice-editor");
+        setEditingId(invoice.id);
+      }
+      return true;
+    },
+    [rejectQuota],
+  );
 
   const preparePages = useCallback(
     async (files: File[], maxPages: number, label: string) => {
@@ -250,6 +292,11 @@ export function GstApp() {
           setPaywallOpen(true);
           return;
         }
+        if (needsVerification) {
+          setCapture({ phase: "idle" });
+          setVerifyOpen(true);
+          return;
+        }
         const pages = await preparePages(files, MAX_INVOICE_PAGES, "Uploading page");
         const filled = applyFieldDefaults({ ...EMPTY_FIELDS }, useGstStore.getState().defaults);
         const invoice: GstInvoice = {
@@ -269,11 +316,12 @@ export function GstApp() {
           },
         };
         previewUrlsRef.current = [];
-        if (!insertInvoice(invoice, false)) {
+        if (!(await insertInvoice(invoice, false))) {
           for (const page of pages) URL.revokeObjectURL(page.previewUrl);
           setCapture({ phase: "idle" });
           return;
         }
+        void rememberOriginalFiles(invoice.id, files, "replace");
         setCapture({ phase: "idle" });
         toast.message("Uploaded. Analysis is running in the background.");
         const { startAnalysis } = await import("@/lib/analyze");
@@ -289,7 +337,7 @@ export function GstApp() {
         setCapture({ phase: "error", message });
       }
     },
-    [insertInvoice, preparePages],
+    [insertInvoice, preparePages, needsVerification],
   );
 
   const handleAddPages = useCallback(
@@ -364,6 +412,7 @@ export function GstApp() {
         previewUrlsRef.current = [];
         setCapture({ phase: "idle" });
         toast.message("Extra pages uploaded. Analysis is running in the background.");
+        void rememberOriginalFiles(invoiceId, files, "append");
         const { startAnalysis } = await import("@/lib/analyze");
         void startAnalysis({
           invoiceId,
@@ -393,13 +442,17 @@ export function GstApp() {
       import("@/components/invoice-editor"),
     ]);
     const invoice = makeSampleInvoice(useGstStore.getState().invoices.length);
-    if (!insertInvoice(invoice, true)) return;
+    if (!(await insertInvoice(invoice, true))) return;
     toast.success("Sample invoice added to the register.");
   }, [insertInvoice]);
 
   const handleManual = useCallback(() => {
     hydrateGstStore();
     const store = useGstStore.getState();
+    if (needsVerification) {
+      setVerifyOpen(true);
+      return;
+    }
     if (!canCapture(store.capturesUsed, store.isPro)) {
       setPaywallOpen(true);
       return;
@@ -422,7 +475,7 @@ export function GstApp() {
         ? "Fill the GST fields. Defaults are in place."
         : "Fill the GST fields.",
     );
-  }, []);
+  }, [needsVerification]);
 
   const closeEditor = useCallback(
     (opts?: { saved?: boolean }) => {
@@ -450,54 +503,70 @@ export function GstApp() {
     (fields: InvoiceFields, filledFromDefaults: InvoiceField[] | undefined, lineItems: LineItem[]) => {
       if (saveLock.current) return;
       saveLock.current = true;
-      try {
-        const id = editingId;
-        if (!id) return;
-        const lines = pruneLineItems(lineItems);
-        const meaningful = hasMeaningfulInvoiceData(fields, lines, filledFromDefaults);
-        const inStore = useGstStore.getState().invoices.some((invoice) => invoice.id === id);
-        const draft = manualDraftRef.current?.id === id ? manualDraftRef.current : null;
+      void (async () => {
+        try {
+          const id = editingId;
+          if (!id) return;
+          const lines = pruneLineItems(lineItems);
+          const meaningful = hasMeaningfulInvoiceData(fields, lines, filledFromDefaults);
+          const stored = useGstStore.getState().invoices.find((invoice) => invoice.id === id);
+          const inStore = Boolean(stored);
+          const draft = manualDraftRef.current?.id === id ? manualDraftRef.current : null;
 
-        if (!meaningful) {
-          if (!inStore) {
-            toast.message("Add an invoice number, supplier, amount, or line item to save.");
+          if (!meaningful) {
+            if (!inStore) {
+              toast.message("Add an invoice number, supplier, amount, or line item to save.");
+              return;
+            }
+            const saved = updateInvoice(id, { fields, filledFromDefaults, lineItems: lines });
+            if (!saved) {
+              setPaywallOpen(true);
+              return;
+            }
+            const row = useGstStore.getState().invoices.find((invoice) => invoice.id === id);
+            if (row) persistStoredInvoiceNow(row);
+            closeEditor({ saved: true });
+            toast.success("Row saved.");
             return;
           }
+
+          if (!inStore && draft) {
+            const invoice: GstInvoice = {
+              ...draft,
+              fields,
+              filledFromDefaults,
+              lineItems: lines,
+            };
+            if (!(await insertInvoice(invoice, false, true))) return;
+            closeEditor({ saved: true });
+            toast.success("Row saved.");
+            return;
+          }
+
+          if (stored?.pendingQuota === true) {
+            const result = await takeCaptureSlot();
+            if (!result.ok) {
+              rejectQuota(result);
+              return;
+            }
+            setNeedsVerification(result.needsVerification);
+          }
+
           const saved = updateInvoice(id, { fields, filledFromDefaults, lineItems: lines });
           if (!saved) {
             setPaywallOpen(true);
             return;
           }
+          const row = useGstStore.getState().invoices.find((invoice) => invoice.id === id);
+          if (row) persistStoredInvoiceNow(row);
           closeEditor({ saved: true });
           toast.success("Row saved.");
-          return;
+        } finally {
+          saveLock.current = false;
         }
-
-        if (!inStore && draft) {
-          const invoice: GstInvoice = {
-            ...draft,
-            fields,
-            filledFromDefaults,
-            lineItems: lines,
-          };
-          if (!insertInvoice(invoice, false, true)) return;
-          closeEditor({ saved: true });
-          toast.success("Row saved.");
-          return;
-        }
-
-        const saved = updateInvoice(id, { fields, filledFromDefaults, lineItems: lines });
-        if (!saved) {
-          setPaywallOpen(true);
-          return;
-        }
-        closeEditor({ saved: true });
-        toast.success("Row saved.");
-      } finally {
-        saveLock.current = false;
-      }
+      })();
     },
-    [editingId, closeEditor, insertInvoice, updateInvoice],
+    [editingId, closeEditor, insertInvoice, updateInvoice, rejectQuota],
   );
 
   const requestDelete = useCallback((id: string) => {
@@ -512,6 +581,7 @@ export function GstApp() {
     if (inStore) {
       void import("@/lib/analyze").then((mod) => mod.abortAnalysis(id));
       removeInvoice(id);
+      removeStoredInvoice(id);
     }
     setManualDraft((current) => (current?.id === id ? null : current));
     setSelectedIds((prev) => prev.filter((item) => item !== id));
@@ -539,16 +609,27 @@ export function GstApp() {
   const handleTally = useCallback(async () => {
     const rows = useGstStore.getState().invoices.filter((invoice) => selectedIds.includes(invoice.id));
     if (!rows.length) {
-      toast.message("Select at least one purchase invoice, then download Tally XML.");
+      toast.message("Select at least one purchase invoice, then download TallyPrime XML.");
       return;
     }
     const { downloadTallyXml } = await import("@/lib/tally");
-    downloadTallyXml(rows);
-    toast.success(`Tally XML downloaded for ${rows.length} purchase voucher${rows.length === 1 ? "" : "s"}.`);
+    try {
+      const report = downloadTallyXml(rows);
+      toast.success(`TallyPrime XML downloaded for ${rows.length} purchase voucher${rows.length === 1 ? "" : "s"}.`);
+      if (report.warnings.length) toast.message(report.warnings[0]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Tally XML failed schema checks.");
+    }
   }, [selectedIds]);
 
+  const handleDownloadOriginal = useCallback(async (id: string) => {
+    const ok = await downloadOriginalFiles(id);
+    if (!ok) toast.message("No original file is stored for this invoice.");
+    else toast.success("Original file downloaded.");
+  }, []);
+
   const handleIrnApply = useCallback(
-    (record: GspIrnRecord) => {
+    async (record: GspIrnRecord) => {
       hydrateGstStore();
       const store = useGstStore.getState();
       const filled = applyFieldDefaults(
@@ -570,7 +651,7 @@ export function GstApp() {
         filledFromDefaults: filled.applied.length ? filled.applied : undefined,
         lineItems: lineItemsFromExtract(record.lineItems),
       };
-      if (!insertInvoice(invoice, true)) return;
+      if (!(await insertInvoice(invoice, true))) return;
       toast.success("e-Invoice added from QR / IRN.");
     },
     [insertInvoice],
@@ -599,6 +680,12 @@ export function GstApp() {
             </div>
           </div>
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/history">
+                <History className="size-4" />
+                <span className="hidden sm:inline">History</span>
+              </Link>
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -613,9 +700,14 @@ export function GstApp() {
             {isPro ? (
               <Badge>Pro</Badge>
             ) : (
-              <button type="button" onClick={() => setPaywallOpen(true)}>
-                <Badge variant={remaining <= 0 ? "warn" : "muted"}>
-                  {`${Math.min(capturesUsed, FREE_CAPTURES)} of ${FREE_CAPTURES}`}
+              <button
+                type="button"
+                onClick={() => (needsVerification ? setVerifyOpen(true) : setPaywallOpen(true))}
+              >
+                <Badge variant={remaining <= 0 || needsVerification ? "warn" : "muted"}>
+                  {needsVerification
+                    ? "Verify email"
+                    : `${Math.min(capturesUsed, FREE_CAPTURES)} of ${FREE_CAPTURES}`}
                 </Badge>
               </button>
             )}
@@ -640,11 +732,24 @@ export function GstApp() {
             Photograph a GST invoice. Get a clean register row.
           </h1>
           <p className="mt-2 max-w-xl text-sm text-muted-foreground sm:text-base">
-            Extract invoice fields, line items, addresses, and IRN. Missing
-            header fields use your defaults. Download CSV or Tally purchase XML.
+            Extract invoice fields, line items, scheme, MRP, PAN, and IRN. Missing
+            header fields use your defaults. Download CSV or TallyPrime XML.
             IRN lookup uses a GSP sandbox — not the live NIC IRP.
           </p>
         </div>
+
+        {needsVerification ? (
+          <div className="rounded-xl bg-card px-4 py-3 text-sm shadow-border">
+            <p className="font-medium">Verify your email to use free captures on this account.</p>
+            <p className="mt-1 text-muted-foreground">
+              Signed-out capture still counts against this network address. Sign-in does not reset
+              the count.
+            </p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => setVerifyOpen(true)}>
+              Verify email
+            </Button>
+          </div>
+        ) : null}
 
         {capture.phase === "working" ? (
           <ExtractingCard label={capture.label} previews={capture.previews} />
@@ -699,12 +804,13 @@ export function GstApp() {
           onExport={handleExport}
           onExportLines={handleExportLines}
           onTally={handleTally}
+          onDownloadOriginal={handleDownloadOriginal}
         />
       </main>
 
       <footer className="mt-auto border-t border-border bg-card/70">
         <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <p>GSTSlip does not connect to Tally or the live NIC IRP. Tally XML is a file you import. IRN lookup uses a GSP sandbox.</p>
+          <p>GSTSlip does not connect to Tally or the live NIC IRP. TallyPrime XML (Data Interchange) is a file you import with Alt+O → Transactions. IRN lookup uses a GSP sandbox.</p>
           <p>Fields stay on this device until you export CSV.</p>
         </div>
       </footer>
@@ -756,6 +862,15 @@ export function GstApp() {
             }}
           />
         ) : null}
+
+        {verifyOpen ? (
+          <VerifyEmailDialog
+            open={verifyOpen}
+            email={user?.primaryEmail ?? null}
+            onOpenChange={setVerifyOpen}
+            onVerified={() => setNeedsVerification(false)}
+          />
+        ) : null}
       </Suspense>
 
       <AlertDialog
@@ -774,7 +889,7 @@ export function GstApp() {
               {isPro
                 ? "The row leaves the register."
                 : pendingDeleteCharged
-                  ? "The row leaves the register. One free capture is returned."
+                  ? "The row leaves the register. Used free captures are not returned."
                   : "A free capture is used only when this invoice is saved. Removing it now leaves your quota unchanged."}
             </AlertDialogDescription>
           </AlertDialogHeader>

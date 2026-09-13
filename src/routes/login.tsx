@@ -164,8 +164,8 @@ function LoginPage() {
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {signingUp
-            ? "Register with email. Invoice rows stay on this device. Sign-in is required to buy GSTSlip Pro."
-            : "Email, Google, or X. Invoice rows stay on this device. Sign-in is required to buy GSTSlip Pro — capture still works without an account."}
+            ? "Register with email. Verify once to use the 10 free captures on this account. Invoice rows stay on this device."
+            : "Email, Google, or X. Signed-out capture counts against this network address. Sign-in does not reset the free quota. Invoice rows stay on this device."}
         </p>
 
         {authEnabled ? (
