@@ -6,6 +6,7 @@ India GST invoice capture. Photograph or upload a tax invoice, review extracted 
 
 - Capture from photo, PDF pages, sample invoice, e-invoice QR / IRN (GSP sandbox), or manual entry
 - 10 free documents, then GSTSlip Pro at ₹499/month via Razorpay (30 days per payment, no auto-debit)
+- Operator admin desk for accounts and Pro (preview: any signed-in account; live: GSTSLIP_ADMIN_EMAILS)
 - Manual entry uses a free capture only when a real invoice is saved
 - Fields stay on this device until you export
 

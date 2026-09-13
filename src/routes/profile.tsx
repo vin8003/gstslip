@@ -11,6 +11,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import type { BillingSnapshot } from "@/lib/billing/plan";
 import { markPaywallReturn } from "@/lib/billing/paywall-return";
 import { cancelSubscription, getEntitlement, isUnauthorized } from "@/lib/billing/store";
+import { getAdminAccess } from "@/lib/admin/desk";
 import { FREE_CAPTURES, remainingCaptures } from "@/lib/gst";
 import { useGstStore } from "@/lib/store";
 
@@ -45,6 +46,7 @@ function ProfilePage() {
   const [signingOut, setSigningOut] = useState(false);
   const [busyPlan, setBusyPlan] = useState(false);
   const [snap, setSnap] = useState<BillingSnapshot | null>(null);
+  const [adminAllowed, setAdminAllowed] = useState(false);
   const gateSession = useSyncExternalStore(
     subscribeToNothing,
     hasGateSessionMarker,
@@ -63,6 +65,9 @@ function ProfilePage() {
       .catch((err) => {
         if (isUnauthorized(err)) navigate({ to: "/login" });
       });
+    getAdminAccess()
+      .then((access) => setAdminAllowed(access.allowed))
+      .catch(() => setAdminAllowed(false));
   }, [signedIn, navigate, setPro]);
 
   if (isPending) {
@@ -192,6 +197,12 @@ function ProfilePage() {
         {signedIn && !pro ? (
           <Button className="mt-5 h-12 w-full" disabled={busyPlan} onClick={goUpgrade}>
             Upgrade to Pro
+          </Button>
+        ) : null}
+
+        {adminAllowed ? (
+          <Button className="mt-3 h-12 w-full" variant="secondary" asChild>
+            <Link to="/admin">Admin desk</Link>
           </Button>
         ) : null}
 

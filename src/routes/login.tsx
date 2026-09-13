@@ -56,7 +56,9 @@ function LoginPage() {
   }
 
   if (user && !user.isDevFallback) {
-    return next === "/" ? <Navigate to="/" /> : <Navigate to="/profile" />;
+    if (next === "/") return <Navigate to="/" />;
+    if (next === "/admin") return <Navigate to="/admin" />;
+    return <Navigate to="/profile" />;
   }
 
   function finish(path: string) {
