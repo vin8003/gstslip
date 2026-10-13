@@ -2,50 +2,49 @@
 @import "tw-animate-css";
 
 @theme {
-  --color-background: #f3efe6;
-  --color-foreground: #1a1814;
-  --color-card: #fbf9f4;
-  --color-card-foreground: #1a1814;
-  --color-popover: #fbf9f4;
-  --color-popover-foreground: #1a1814;
-  --color-primary: #0f4d44;
-  --color-primary-foreground: #f7f3ea;
-  --color-secondary: #e7e1d4;
-  --color-secondary-foreground: #1a1814;
-  --color-muted: #efe9dc;
-  --color-muted-foreground: #6f675c;
-  --color-accent: #dce8e4;
-  --color-accent-foreground: #0f4d44;
-  --color-destructive: #9b2c2c;
-  --color-destructive-foreground: #fbf9f4;
-  --color-border: #d9d1c3;
-  --color-input: #d9d1c3;
-  --color-ring: #0f4d44;
-  --color-ink: #1a1814;
-  --color-paper: #f3efe6;
-  --color-rule: #cfc6b6;
-  --color-teal: #0f4d44;
-  --color-sage: #3d7a6e;
+  --color-background: #e4eaef;
+  --color-foreground: #17202a;
+  --color-card: #fbfcfd;
+  --color-card-foreground: #17202a;
+  --color-popover: #fbfcfd;
+  --color-popover-foreground: #17202a;
+  --color-primary: #1d4e89;
+  --color-primary-foreground: #f4f7fa;
+  --color-secondary: #d5dee6;
+  --color-secondary-foreground: #17202a;
+  --color-muted: #eef2f5;
+  --color-muted-foreground: #5a6a78;
+  --color-accent: #e3ebf3;
+  --color-accent-foreground: #1d4e89;
+  --color-destructive: #9c2f2a;
+  --color-destructive-foreground: #fbfcfd;
+  --color-border: #c9d3dc;
+  --color-input: #c9d3dc;
+  --color-ring: #1d4e89;
+  --color-ink: #17202a;
+  --color-paper: #fbfcfd;
+  --color-rule: #c9d3dc;
+  --color-teal: #1d4e89;
+  --color-sage: #1d4e89;
+  --color-stamp: #9c2f2a;
   --color-warn: #8a5a12;
   --color-warn-foreground: #fbf6ea;
-  --color-ok: #1f6b4a;
-  --radius-xs: 4px;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
-  --radius: 12px;
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Fraunces", ui-serif, Georgia, serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --shadow-border: 0px 0px 0px 1px rgba(26, 24, 20, 0.06),
-    0px 1px 2px -1px rgba(26, 24, 20, 0.06), 0px 2px 4px 0px rgba(26, 24, 20, 0.04);
-  --shadow-border-hover: 0px 0px 0px 1px rgba(26, 24, 20, 0.1),
-    0px 1px 2px -1px rgba(26, 24, 20, 0.08), 0px 2px 4px 0px rgba(26, 24, 20, 0.06);
+  --color-ok: #1d6b45;
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius: 6px;
+  --font-sans: "Schibsted Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Schibsted Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Schibsted Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --shadow-border: 0 0 0 1px #c9d3dc;
+  --shadow-border-hover: 0 0 0 1px #aebcc8;
   --duration-quick: 150ms;
-  --duration-fast: 250ms;
-  --duration-slow: 400ms;
-  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 200ms;
+  --duration-slow: 240ms;
+  --ease-smooth-out: cubic-bezier(0.2, 0, 0, 1);
 }
 
 @layer base {
@@ -63,16 +62,7 @@
   body {
     @apply bg-background text-foreground font-sans;
     min-height: 100dvh;
-    background-image:
-      linear-gradient(180deg, #efe9dc 0%, transparent 42px),
-      repeating-linear-gradient(
-        90deg,
-        transparent,
-        transparent 47px,
-        color-mix(in oklab, var(--color-ink) 3.5%, transparent) 47px,
-        color-mix(in oklab, var(--color-ink) 3.5%, transparent) 48px
-      );
-    background-size: 100% 100%, 48px 100%;
+    font-feature-settings: "ss01", "tnum";
   }
 
   button:not(:disabled),
@@ -135,18 +125,11 @@
   animation: scan-sweep 1.8s var(--ease-smooth-out) infinite;
 }
 
-.enter-up {
-  animation: fade-up 400ms var(--ease-smooth-out) both;
-}
-
-.enter-up-delay-1 {
-  animation-delay: 40ms;
-}
-.enter-up-delay-2 {
-  animation-delay: 80ms;
-}
+.enter-up,
+.enter-up-delay-1,
+.enter-up-delay-2,
 .enter-up-delay-3 {
-  animation-delay: 120ms;
+  animation: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

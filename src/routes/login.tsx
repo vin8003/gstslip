@@ -154,8 +154,7 @@ function LoginPage() {
       <Link to="/" className="flex items-center gap-2.5">
         <SlipMark />
         <div>
-          <p className="font-display text-lg font-medium leading-tight">GSTSlip</p>
-          <p className="text-xs text-muted-foreground">India GST invoice capture</p>
+        <p className="text-base font-semibold leading-none tracking-tight">GSTSlip</p>
         </div>
       </Link>
       <section className="rounded-xl border border-border bg-card p-5 shadow-border">

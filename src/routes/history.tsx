@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Download, History, LoaderCircle, RotateCcw, Trash2 } from "lucide-react";
+import { Download, LoaderCircle, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AccountBar } from "@/components/account-bar";
 import { SlipMark } from "@/components/mark";
@@ -16,7 +16,7 @@ import { hydrateGstStore, useGstStore } from "@/lib/store";
 export const Route = createFileRoute("/history")({
   component: HistoryPage,
   head: () => ({
-    meta: [{ title: "History · GSTSlip" }],
+    meta: [{ title: "History, GSTSlip" }],
   }),
 });
 
@@ -99,7 +99,7 @@ function HistoryPage() {
         <Link to="/" className="flex items-center gap-2.5">
           <SlipMark />
           <div>
-            <p className="font-display text-lg font-medium leading-tight">GSTSlip</p>
+            <p className="text-base font-semibold leading-none tracking-tight">GSTSlip</p>
             <p className="text-xs text-muted-foreground">History</p>
           </div>
         </Link>
@@ -112,7 +112,7 @@ function HistoryPage() {
       </header>
 
       <div>
-        <h1 className="font-display text-3xl font-medium tracking-tight sm:text-4xl">Invoice history</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Invoice history</h1>
         <p className="mt-2 max-w-xl text-sm text-muted-foreground sm:text-base">
           Uploaded invoices are stored for reuse. Background covers analysis that is still running
           or stopped. Historical is the saved register.
@@ -131,9 +131,8 @@ function HistoryPage() {
           <LoaderCircle className="size-6 animate-spin text-sage" aria-label="Loading history" />
         </div>
       ) : rows.length === 0 ? (
-        <section className="rounded-xl bg-card px-5 py-10 shadow-border">
-          <History className="size-6 text-sage" />
-          <p className="mt-3 font-display text-xl font-medium tracking-tight">No stored invoices yet</p>
+        <section className="border border-border bg-card px-5 py-8">
+          <p className="text-lg font-semibold tracking-tight">No stored invoices yet</p>
           <p className="mt-1 max-w-md text-sm text-muted-foreground">
             Capture or save an invoice and it appears here, signed in on this account or signed out
             on this network address.
@@ -192,11 +191,11 @@ function HistorySection({
   return (
     <section>
       <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className="font-display text-xl font-medium tracking-tight">{title}</h2>
+        <h2 className="text-base font-semibold tracking-tight">{title}</h2>
         <p className="text-xs text-muted-foreground">{rows.length}</p>
       </div>
       {rows.length === 0 ? (
-        <p className="rounded-xl bg-card px-4 py-5 text-sm text-muted-foreground shadow-border">{empty}</p>
+        <p className="border border-border bg-card px-4 py-5 text-sm text-muted-foreground">{empty}</p>
       ) : (
         <ul className="space-y-2">
           {rows.map((row) => {
@@ -206,7 +205,7 @@ function HistorySection({
             return (
               <li
                 key={row.id}
-                className="flex flex-col gap-3 rounded-xl bg-card px-4 py-3 shadow-border sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 border border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">

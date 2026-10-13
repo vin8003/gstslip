@@ -56,7 +56,7 @@ export function AccountMenu() {
     <div ref={rootRef} className="relative">
       <button
         type="button"
-        className="flex items-center gap-2 rounded-full border border-border bg-card py-0.5 pl-0.5 pr-2 shadow-border hover:shadow-border-hover"
+        className="flex items-center gap-2 border border-border bg-card py-0.5 pl-0.5 pr-2 hover:bg-muted"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}

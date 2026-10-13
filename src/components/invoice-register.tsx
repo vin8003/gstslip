@@ -96,12 +96,9 @@ export function InvoiceRegister({
 
   if (invoices.length === 0) {
     return (
-      <section className="enter-up enter-up-delay-2 rounded-xl bg-card px-5 py-10 text-center shadow-border">
-        <FileSpreadsheet className="mx-auto size-8 text-sage" />
-        <h2 className="mt-3 font-display text-xl font-medium tracking-tight">
-          Register is empty
-        </h2>
-        <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
+      <section className="border border-border bg-card px-5 py-8">
+        <h2 className="text-lg font-semibold tracking-tight">Register is empty</h2>
+        <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
           Captured invoices appear here as one row each, with line items,
           addresses, and IRN on the invoice. Export CSV or TallyPrime XML when ready.
         </p>
@@ -110,7 +107,7 @@ export function InvoiceRegister({
   }
 
   return (
-    <section className="enter-up enter-up-delay-2 space-y-3">
+    <section className="space-y-3">
       <input
         ref={addInputRef}
         type="file"
@@ -127,12 +124,12 @@ export function InvoiceRegister({
       />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="font-display text-xl font-medium tracking-tight">Register</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Register</h2>
           <p className="text-sm text-muted-foreground">
             {invoices.length} invoice{invoices.length === 1 ? "" : "s"}
             {lineTotal
-              ? ` · ${lineTotal} line${lineTotal === 1 ? "" : "s"}`
-              : " · one row per document"}
+              ? `, ${lineTotal} line${lineTotal === 1 ? "" : "s"}`
+              : ", one row per document"}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -160,11 +157,11 @@ export function InvoiceRegister({
       </div>
 
       {wide ? (
-      <div className="overflow-hidden rounded-xl bg-card shadow-border">
+      <div className="overflow-hidden border border-border bg-card">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[96rem] border-collapse text-left text-sm">
             <thead>
-              <tr className="border-b border-border bg-muted/60 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <tr className="border-b border-border bg-muted text-xs font-medium text-muted-foreground">
                 <th className="w-12 px-3 py-3">
                   <input
                     type="checkbox"
@@ -387,7 +384,7 @@ const InvoiceCard = memo(function InvoiceCard({
   const previewLines = pruneLineItems(invoice.lineItems).slice(0, 2);
 
   return (
-    <article className="rounded-xl bg-card p-4 shadow-border">
+    <article className="border border-border bg-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <input

@@ -119,8 +119,7 @@ function ProfilePage() {
         <Link to="/" className="flex items-center gap-2.5">
           <SlipMark />
           <div>
-            <p className="font-display text-lg font-medium leading-tight">GSTSlip</p>
-            <p className="text-xs text-muted-foreground">Profile</p>
+            <p className="text-base font-semibold leading-none tracking-tight">GSTSlip</p>
           </div>
         </Link>
         <div className="flex items-center gap-1.5">

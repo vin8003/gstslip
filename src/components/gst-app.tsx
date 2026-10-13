@@ -668,16 +668,11 @@ export function GstApp() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-30 border-b border-border/80 bg-background/90 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <header className="sticky top-0 z-30 border-b-2 border-primary bg-background">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-2.5">
           <div className="flex items-center gap-2.5">
             <SlipMark />
-            <div>
-              <p className="font-display text-lg font-medium leading-tight tracking-tight">
-                GSTSlip
-              </p>
-              <p className="text-xs text-muted-foreground">India GST invoice capture</p>
-            </div>
+            <p className="text-base font-semibold leading-none tracking-tight">GSTSlip</p>
           </div>
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
             <Button variant="ghost" size="sm" asChild>
@@ -694,7 +689,7 @@ export function GstApp() {
             >
               <SlidersHorizontal className="size-4" />
               <span className="hidden sm:inline">
-                Defaults{defaultCount ? ` · ${defaultCount}` : ""}
+                Defaults{defaultCount ? ` (${defaultCount})` : ""}
               </span>
             </Button>
             {isPro ? (
@@ -726,20 +721,19 @@ export function GstApp() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6 pb-16">
-        <div className="enter-up">
-          <h1 className="font-display text-3xl font-medium tracking-tight sm:text-4xl">
-            Photograph a GST invoice. Get a clean register row.
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 py-8 pb-16">
+        <div className="max-w-2xl">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Read the invoice. Keep the register.
           </h1>
-          <p className="mt-2 max-w-xl text-sm text-muted-foreground sm:text-base">
-            Extract invoice fields, line items, scheme, MRP, PAN, and IRN. Missing
-            header fields use your defaults. Download CSV or TallyPrime XML.
-            IRN lookup uses a GSP sandbox — not the live NIC IRP.
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
+            Photograph or upload a GST tax invoice. GSTSlip fills the row, including line items,
+            then exports CSV or TallyPrime XML. IRN lookup uses a GSP sandbox, not the live NIC IRP.
           </p>
         </div>
 
         {needsVerification ? (
-          <div className="rounded-xl bg-card px-4 py-3 text-sm shadow-border">
+          <div className="border border-border bg-card px-4 py-3 text-sm">
             <p className="font-medium">Verify your email to use free captures on this account.</p>
             <p className="mt-1 text-muted-foreground">
               Signed-out capture still counts against this network address. Sign-in does not reset
@@ -756,7 +750,7 @@ export function GstApp() {
         ) : null}
 
         {capture.phase === "error" ? (
-          <div className="rounded-xl bg-card px-4 py-3 text-sm shadow-border">
+          <div className="border border-border bg-card px-4 py-3 text-sm">
             <p className="font-medium text-destructive">Could not capture</p>
             <p className="mt-1 text-muted-foreground">{capture.message}</p>
             <Button
@@ -784,8 +778,8 @@ export function GstApp() {
 
         {invoices.length > 0 ? (
           <p className="text-sm text-muted-foreground">
-            Taxable in register{" "}
-            <span className="font-mono tabular-nums text-foreground">
+            Taxable in this register{" "}
+            <span className="font-semibold tabular-nums text-foreground">
               {formatInr(taxableSum)}
             </span>
           </p>
@@ -808,10 +802,10 @@ export function GstApp() {
         />
       </main>
 
-      <footer className="mt-auto border-t border-border bg-card/70">
-        <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <p>GSTSlip does not connect to Tally or the live NIC IRP. TallyPrime XML (Data Interchange) is a file you import with Alt+O → Transactions. IRN lookup uses a GSP sandbox.</p>
-          <p>Fields stay on this device until you export CSV.</p>
+      <footer className="mt-auto border-t border-border">
+        <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-4 text-xs leading-relaxed text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <p>TallyPrime XML is a file. Import it with Alt+O, then Transactions. GSTSlip does not connect to Tally or the live NIC IRP.</p>
+          <p>Saved fields stay on this device until you export.</p>
         </div>
       </footer>
 
@@ -907,7 +901,7 @@ export function GstApp() {
 
 function ExtractingCard({ label, previews }: { label: string; previews: string[] }) {
   return (
-    <div className="rounded-xl bg-card px-4 py-4 shadow-border sm:px-5">
+    <div className="border border-border bg-card px-4 py-4 sm:px-5">
       <div className="flex items-center gap-2.5">
         <LoaderCircle className="size-4 shrink-0 animate-spin text-sage" />
         <p className="text-sm font-medium">{label}</p>

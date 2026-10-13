@@ -6,7 +6,7 @@ import appCss from "../styles.css?url";
 
 const APP_NAME = "GSTSlip";
 const FONT_HREF =
-  "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap";
+  "https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&display=swap";
 
 /** Same public-host gate the injector uses for og:image — no loopback, IPs, or Vercel system hosts. */
 function publicShareHost(hostHeader = ""): string {
@@ -42,7 +42,7 @@ export const Route = createRootRoute({
           content:
             "Photograph an India GST tax invoice, extract the fields, and export a CSV register.",
         },
-        { name: "theme-color", content: "#0F4D44" },
+        { name: "theme-color", content: "#1d4e89" },
         ...(xBanner ? [{ property: "x:game:image", content: xBanner }] : []),
       ],
       links: [
